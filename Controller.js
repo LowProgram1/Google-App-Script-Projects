@@ -41,6 +41,7 @@ function getAuthenticatedUser() {
 }
 var VIEW_MAP = {
   'Dashboard': 'Dashboard',
+  'Menu': 'View.Menu.Index',
   'Tracker': 'View.Tracker.Index',
   'Conducts': 'View.Conducts.Index',
   'Category': 'View.Category.Index',
@@ -67,11 +68,134 @@ function getView(viewName) {
 }
 
 /**
+ * Returns list of yearly tracker tables for Menu and Tracker year selector.
+ */
+function getYearlyTablesList() {
+  try {
+    return getYearlyTablesMetadata();
+  } catch (e) {
+    console.error('getYearlyTablesList: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch table metadata from tbTrackerManage for Menu UI.
+ */
+function fetchTableMetadata() {
+  try {
+    return getManageTableMetadata();
+  } catch (e) {
+    console.error('fetchTableMetadata: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Add new yearly tracker: create sheet, sync Data Validation from Template, register in tbTrackerManage.
+ * @param {string} year - 4-digit year (e.g. 2026)
+ * @param {string} [displayLabel] - Optional display label; defaults to year
+ */
+function addNewYearlyTracker(year, displayLabel) {
+  try {
+    var res = initializeYearlyTable(year);
+    if (!res.restored) {
+      addManageTableRow(res.tableName, year, (displayLabel || '').trim() || year);
+      res.message = 'Year [' + year + '] generated. Sidebar updated & Data Validation synced.';
+    } else {
+      res.message = res.message || 'Table for ' + year + ' restored (was hidden).';
+    }
+    return res;
+  } catch (e) {
+    console.error('addNewYearlyTracker: ' + e.message);
+    var msg = e.message || 'Unknown error';
+    if (msg.indexOf('already exists') >= 0) throw new Error('Error: Sheet for ' + year + ' already exists or Template is missing.');
+    throw new Error('Error: ' + msg);
+  }
+}
+
+/**
+ * Update display label for a yearly tracker in tbTrackerManage.
+ */
+function updateYearlyTrackerLabel(uniqueId, displayLabel) {
+  try {
+    updateManageTableRow(uniqueId, displayLabel);
+    return { success: true };
+  } catch (e) {
+    console.error('updateYearlyTrackerLabel: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Delete yearly tracker from tbTrackerManage. Optionally archive (hide) the sheet.
+ */
+function deleteYearlyTracker(uniqueId, archiveSheet) {
+  try {
+    deleteManageTableRow(uniqueId, archiveSheet !== false);
+    return { success: true, message: 'Record removed.' };
+  } catch (e) {
+    console.error('deleteYearlyTracker: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Sync: verify sheet exists and update status in tbTrackerManage.
+ */
+function syncYearlyTracker(uniqueId) {
+  try {
+    return syncManageTableRow(uniqueId);
+  } catch (e) {
+    console.error('syncYearlyTracker: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Fetch all tracker data for a year (for post-CRUD refresh). Used to update appData after add/edit/bulk.
+ */
+function fetchTrackerYearData(year) {
+  try {
+    return getTrackerDataByProvince('', year || '');
+  } catch (e) {
+    console.error('fetchTrackerYearData: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Delete a tracker record by year and serial ID. Routes to AppTracker or AppTracker_YYYY.
+ */
+function deleteRecordByYear(year, id) {
+  try {
+    var sheetName = getTrackerSheetName(year);
+    return deleteRecord(id, sheetName, 1);
+  } catch (e) {
+    console.error('deleteRecordByYear: ' + e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * One-shot batch fetch: metadata, all row data for every active year, provinces, sectors.
+ * Single server call for maximum speed. Client stores in global state for instant filtering.
+ */
+function fetchOneShotAppData() {
+  try {
+    return fetchOneShotAppDataModel();
+  } catch (e) {
+    console.error('fetchOneShotAppData: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
  * One-shot fetch: return HTML for all sidebar views. Client caches and switches with no loading; tables auto-load in initViewAfterLoad.
  */
 function getAllViews() {
   var out = {};
-  var names = ['Dashboard', 'Tracker', 'Conducts', 'Category', 'Logs'];
+  var names = ['Dashboard', 'Menu', 'Tracker', 'Conducts', 'Category', 'Logs'];
   for (var i = 0; i < names.length; i++) {
     var viewName = names[i];
     var fileName = VIEW_MAP[viewName];

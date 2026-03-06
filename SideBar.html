@@ -1,31 +1,41 @@
 <div class="position-sticky">
-  <ul class="nav flex-column">
+  <ul class="nav flex-column" id="sidebarNavList">
     <li class="nav-item">
-      <a class="nav-link active" href="javascript:void(0);" onclick="loadView('Dashboard')">
+      <a class="nav-link sidebar-nav-main active" href="javascript:void(0);" onclick="loadView('Dashboard')">
         <i class="bi bi-columns-gap"></i>
         <span class="sidebar-label ms-2">Dashboard</span>
       </a>
     </li>
     <li class="nav-item">
-      <a class="nav-link" href="javascript:void(0);" onclick="loadView('Tracker')">
-        <i class="bi bi-layers"></i>
-        <span class="sidebar-label ms-2">App Tracker</span>
+      <a class="nav-link sidebar-nav-main" href="javascript:void(0);" onclick="loadView('Menu')">
+        <i class="bi bi-menu-button-wide"></i>
+        <span class="sidebar-label ms-2">Menu</span>
       </a>
     </li>
+    <li class="nav-item sidebar-tracker-parent">
+      <a class="nav-link sidebar-nav-main sidebar-tracker-toggle" href="javascript:void(0);" onclick="toggleSidebarTracker(); return false;" id="sidebarTrackerToggle" aria-expanded="false" aria-controls="sidebarTrackerSubmenu">
+        <i class="bi bi-layers"></i>
+        <span class="sidebar-label ms-2">App Tracker</span>
+        <i class="bi bi-chevron-down sidebar-tracker-chevron ms-auto"></i>
+      </a>
+      <ul class="nav flex-column sidebar-tracker-submenu" id="sidebarTrackerSubmenu" aria-labelledby="sidebarTrackerToggle">
+        <!-- Populated by renderSidebar() from tbTrackerManage -->
+      </ul>
+    </li>
     <li class="nav-item">
-      <a class="nav-link" href="javascript:void(0);" onclick="loadView('Conducts')">
+      <a class="nav-link sidebar-nav-main" href="javascript:void(0);" onclick="loadView('Conducts')">
         <i class="bi bi-calendar-event"></i>
         <span class="sidebar-label ms-2">Conducts</span>
       </a>
     </li>
     <li class="nav-item">
-      <a class="nav-link" href="javascript:void(0);" onclick="loadView('Category')">
+      <a class="nav-link sidebar-nav-main" href="javascript:void(0);" onclick="loadView('Category')">
         <i class="bi bi-tags"></i>
         <span class="sidebar-label ms-2">Category</span>
       </a>
     </li>
     <li class="nav-item">
-      <a class="nav-link" href="javascript:void(0);" onclick="loadView('Logs')">
+      <a class="nav-link sidebar-nav-main" href="javascript:void(0);" onclick="loadView('Logs')">
         <i class="bi bi-ui-checks"></i>
         <span class="sidebar-label ms-2">Audit Logs</span>
       </a>

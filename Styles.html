@@ -117,6 +117,45 @@
     color: var(--primary) !important;
   }
 
+  /* App Tracker parent + submenu (dropdown, no animation) */
+  .sidebar-tracker-parent { position: relative; }
+  .sidebar-tracker-toggle { cursor: pointer; }
+  .sidebar-tracker-toggle .sidebar-tracker-chevron {
+    transition: transform 0.15s ease;
+    font-size: 0.85rem;
+  }
+  .sidebar-tracker-parent.expanded .sidebar-tracker-chevron { transform: rotate(180deg); }
+  .sidebar-tracker-submenu {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 0.25rem 0;
+    display: none;
+    border-left: 2px solid var(--border-color);
+    margin-left: 1.5rem;
+    padding-left: 0.5rem;
+  }
+  .sidebar-tracker-parent.expanded .sidebar-tracker-submenu { display: block; }
+  .sidebar-tracker-submenu .nav-link {
+    padding: 0.5rem 0.75rem;
+    margin: 0.1rem 0;
+    font-size: 0.9rem;
+    color: var(--text-dark) !important;
+    font-weight: 500;
+  }
+  .sidebar-tracker-submenu .nav-link:hover {
+    background-color: #eef2ff;
+    color: var(--primary) !important;
+  }
+  body.sidebar-collapsed .sidebar-tracker-submenu { display: none !important; }
+
+  /* Menu: Generate row alignment (Flexbox) */
+  .menu-generate-row { gap: 1rem; }
+  .menu-generate-field { flex: 0 0 auto; }
+
+  /* Single-Table Display: hide non-active year containers */
+  .year-container.hidden { display: none !important; }
+  .sidebar-tracker-submenu .nav-link.active { background-color: #eef2ff; color: var(--primary) !important; }
+
   /* --- Layout & Cards --- */
   .main-content { padding: 2rem; }
 
@@ -164,6 +203,39 @@
       padding-right: 1rem;
     }
   }
+
+  /* --- Application Tracker: Year-specific cards --- */
+  .tracker-year-card {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .tracker-year-header {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    user-select: none;
+  }
+  .tracker-year-header:hover {
+    background: #f1f5f9;
+  }
+  .tracker-year-header .category-collapse-btn {
+    flex-shrink: 0;
+  }
+
+  /* --- Application Tracker: Collapsible table (max-height transition) --- */
+  .tracker-collapse-content {
+    overflow: hidden;
+    max-height: 2500px;
+    transition: max-height 0.35s ease;
+  }
+  .tracker-collapse-content.collapsed {
+    max-height: 0;
+    overflow: hidden;
+  }
+  .tracker-collapsible-header[aria-expanded="true"] .category-collapse-icon-expanded { display: inline-block !important; visibility: visible !important; }
+  .tracker-collapsible-header[aria-expanded="true"] .category-collapse-icon-collapsed { display: none !important; }
+  .tracker-collapsible-header[aria-expanded="false"] .category-collapse-icon-expanded { display: none !important; }
+  .tracker-collapsible-header[aria-expanded="false"] .category-collapse-icon-collapsed { display: inline-block !important; visibility: visible !important; color: var(--primary); font-size: 1.15rem; }
 
   /* --- Category collapsible containers --- */
   .category-container-card {
@@ -291,9 +363,32 @@
   gap: 5px; /* Space between icons */
 }
 
-/* Optional: Make icons slightly more vibrant on hover */
-.btn-outline-danger:hover { background-color: #dc3545; color: white; }
-.btn-outline-warning:hover { background-color: #ffc107; color: #212529; }
+/* Universal Action Icon Design System: Edit=Green, File=Blue, Delete=Red */
+.action-icon-edit, .action-icon-edit i { color: #198754 !important; }
+.action-icon-edit:hover { background-color: #198754 !important; color: white !important; border-color: #198754 !important; }
+.action-icon-edit:hover i { color: white !important; }
+.action-icon-file, .action-icon-file i { color: #007bff !important; }
+.action-icon-file:hover { background-color: #007bff !important; color: white !important; border-color: #007bff !important; }
+.action-icon-file:hover i { color: white !important; }
+.action-icon-delete, .action-icon-delete i { color: #dc3545 !important; }
+.action-icon-delete:hover { background-color: #dc3545 !important; color: white !important; border-color: #dc3545 !important; }
+.action-icon-delete:hover i { color: white !important; }
+/* Override for Tracker/Category/Agency/Menu action columns */
+.btn-group .btn-outline-primary { color: #007bff; border-color: #007bff; }
+.btn-group .btn-outline-primary:hover { background-color: #007bff; color: white; }
+.btn-group .btn-outline-success, .btn-group .btn-outline-warning { color: #198754; border-color: #198754; }
+.btn-group .btn-outline-success:hover, .btn-group .btn-outline-warning:hover { background-color: #198754; color: white; }
+.btn-group .btn-outline-danger { color: #dc3545; border-color: #dc3545; }
+.btn-group .btn-outline-danger:hover { background-color: #dc3545; color: white; }
+
+/* Menu Table Management: Action icon hover & tooltips */
+.menu-action-btns .btn { transition: all 0.2s ease; }
+.menu-action-btns .menu-btn-edit:hover { background-color: #0d6efd; color: white !important; }
+.menu-action-btns .menu-btn-sync:hover { background-color: #0dcaf0; color: white !important; }
+.menu-action-btns .menu-btn-delete:hover { background-color: #dc3545; color: white !important; }
+.menu-action-btns .btn[title] { cursor: pointer; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.menu-action-btns .spin { animation: spin 0.8s linear infinite; }
 
   /* 3. Darken Zebra Striping for better structure */
   table.dataTable.stripe tbody tr.odd, 
@@ -353,6 +448,34 @@
     z-index: 15 !important;
     background: #1e293b !important;
     color: #ffffff !important;
+  }
+
+  /* Tracker table: neon chips only (no full-cell border/background) */
+  #trackerTable .tracker-chip {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    border-radius: 9999px;
+    font-size: 0.875em;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  #trackerTable .tracker-chip-neon {
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 255, 200, 0.18) 100%);
+    color: #0f172a;
+    border: 1px solid rgba(0, 229, 255, 0.5);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+  }
+  #trackerTable .tracker-chip-type {
+    background: linear-gradient(135deg, rgba(178, 102, 255, 0.28) 0%, rgba(138, 43, 226, 0.18) 100%);
+    color: #1e1b4b;
+    border: 1px solid rgba(178, 102, 255, 0.5);
+    box-shadow: 0 0 8px rgba(178, 102, 255, 0.2);
+  }
+  #trackerTable .tracker-chip-reject {
+    background: linear-gradient(135deg, #dc3545 0%, #b91c1c 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    font-weight: 600;
   }
 
   /* 5. Darken Search and Length Controls */

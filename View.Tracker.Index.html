@@ -1,52 +1,9 @@
 <div class="animate-fade-in">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
-    <h3 class="fw-bold m-0 text-dark page-title">Application Tracker</h3>
-    
-    <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
-      <button class="btn btn-outline-secondary rounded-pill px-3 shadow-sm" onclick="downloadBulkTemplate()">
-        <i class="bi bi-download me-2"></i>
-        <span class="d-none d-sm-inline">Template</span>
-      </button>
+  <!-- Main Page Header -->
+  <h2 class="fw-bold m-0 text-dark page-title mb-4">Application Tracker</h2>
 
-      <button class="btn btn-success rounded-pill px-4 shadow-sm" onclick="document.getElementById('bulkUploadInput').click()">
-        <i class="bi bi-file-earmark-excel me-2"></i>
-        <span class="d-none d-sm-inline">Bulk Upload</span>
-      </button>
-      <input type="file" id="bulkUploadInput" accept=".xlsx, .xls" style="display:none" onchange="handleBulkUpload(event)">
-
-      <button class="btn btn-primary rounded-pill px-4 shadow-sm" onclick="manageFormModal('add')">
-        <i class="bi bi-plus-lg me-2"></i>
-        <span class="d-none d-sm-inline">New Application</span>
-      </button>
-    </div>
-  </div>
-
-  <div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0;">
-    <table id="trackerTable" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">
-      <thead class="bg-light">
-        <tr>
-          <th>#</th>
-          <th>Serial Number</th>
-          <th>Last Name</th>
-          <th>First Name</th>
-          <th>Middle Name</th>
-          <th>Suffix</th>
-          <th>Email Address</th>
-          <th>Contact Number</th>
-          <th>Gender</th>
-          <th>Agency</th>
-          <th>Sector</th>
-          <th>Province</th>
-          <th>City/Municipality</th>
-          <th>District</th>
-          <th>Interview Date</th>
-          <th class="text-center">Type of Application</th>
-          <th class="text-center">Status</th>
-          <th class="text-center">Action</th>
-        </tr>
-      </thead>
-    </table>
-  </div>
+  <!-- Dynamic Yearly Cards Container (populated by renderYearlyCards) -->
+  <div id="trackerYearlyCardsContainer"></div>
 </div>
 
 <div class="modal fade" id="viewFileModal" tabindex="-1" aria-labelledby="viewFileModalLabel" aria-hidden="true">
@@ -69,7 +26,6 @@
         </a>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
-
     </div>
   </div>
 </div>

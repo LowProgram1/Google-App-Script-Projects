@@ -32,6 +32,430 @@ function getDbConnection() {
  * @param {any[][]} twoDimArray - 2D array [row][col]; must match destination dimensions
  */
 const BATCH_WRITE_CHUNK_SIZE = 5000;
+const TRACKER_TEMPLATE_SHEET = 'AppTracker_Template';
+const TRACKER_METADATA_SHEET = '_TableMetadata';
+const TRACKER_MANAGE_SHEET = 'tbTrackerManage';
+
+/**
+ * Resolve tracker sheet name from targetYear.
+ * Legacy/temp: null/empty -> 'AppTracker_Template' (linked to template, not AppTracker which has data).
+ * Yearly: 2026 -> 'AppTracker_2026'.
+ */
+function getTrackerSheetName(targetYear) {
+  if (!targetYear || String(targetYear).trim() === '') return TRACKER_TEMPLATE_SHEET;
+  return 'AppTracker_' + String(targetYear).trim();
+}
+
+/**
+ * Get or create the metadata sheet for yearly table registry.
+ */
+function getOrCreateMetadataSheet(ss) {
+  var sheet = ss.getSheetByName(TRACKER_METADATA_SHEET);
+    if (!sheet) {
+    sheet = ss.insertSheet(TRACKER_METADATA_SHEET);
+    sheet.getRange(1, 1, 1, 3).setValues([['ID', 'TableName', 'CreatedAt']]);
+    sheet.getRange(1, 1, 1, 3).setFontWeight('bold');
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+/**
+ * Ensure tbTrackerManage sheet exists. Columns: Unique ID | Table Name | Year | Created At | Status | Display Label.
+ * If new, auto-populate with existing AppTracker_2024 and AppTracker_2025.
+ */
+function checkAndCreateManageSheet() {
+  try {
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) {
+      sheet = ss.insertSheet(TRACKER_MANAGE_SHEET);
+      sheet.getRange(1, 1, 1, 6).setValues([['Unique ID', 'Table Name', 'Year', 'Created At', 'Status', 'Display Label']]);
+      sheet.getRange(1, 1, 1, 6).setFontWeight('bold');
+      var toAdd = [];
+      var s2024 = ss.getSheetByName('AppTracker_2024');
+      var s2025 = ss.getSheetByName('AppTracker_2025');
+      if (s2024) toAdd.push([Utilities.getUuid().substring(0, 8), 'AppTracker_2024', '2024', new Date().toISOString(), 'Active', '2024']);
+      if (s2025) toAdd.push([Utilities.getUuid().substring(0, 8), 'AppTracker_2025', '2025', new Date().toISOString(), 'Active', '2025']);
+      if (toAdd.length > 0) sheet.getRange(2, 1, toAdd.length + 1, 6).setValues(toAdd);
+    }
+    return true;
+  } catch (e) {
+    console.error('checkAndCreateManageSheet: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Fetch all rows from tbTrackerManage. Returns [{ uniqueId, tableName, year, createdAt, status, displayLabel }].
+ */
+function getManageTableMetadata() {
+  try {
+    checkAndCreateManageSheet();
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    var out = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (row[0]) {
+        out.push({
+          uniqueId: String(row[0]).trim(),
+          tableName: String(row[1] || '').trim(),
+          year: String(row[2] || '').trim(),
+          createdAt: row[3] ? (row[3] instanceof Date ? row[3].toISOString() : String(row[3])) : '',
+          status: String(row[4] || 'Active').trim(),
+          displayLabel: String(row[5] || '').trim() || (row[2] ? String(row[2]) : '')
+        });
+      }
+    }
+    return out.sort(function (a, b) { return (b.year || '').localeCompare(a.year || ''); });
+  } catch (e) {
+    console.error('getManageTableMetadata: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Add a row to tbTrackerManage. Called after creating a new yearly sheet.
+ */
+function addManageTableRow(tableName, year, displayLabel) {
+  try {
+    checkAndCreateManageSheet();
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) throw new Error('tbTrackerManage sheet not found.');
+    var id = Utilities.getUuid().substring(0, 8);
+    var label = (displayLabel || year || tableName || '').trim();
+    sheet.appendRow([id, tableName, String(year).trim(), new Date().toISOString(), 'Active', label]);
+    return { success: true, uniqueId: id };
+  } catch (e) {
+    console.error('addManageTableRow: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Update display label for a row in tbTrackerManage.
+ */
+function updateManageTableRow(uniqueId, displayLabel) {
+  try {
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) throw new Error('tbTrackerManage sheet not found.');
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(uniqueId).trim()) {
+        sheet.getRange(i + 1, 6).setValue((displayLabel || '').trim());
+        return { success: true };
+      }
+    }
+    throw new Error('Record not found.');
+  } catch (e) {
+    console.error('updateManageTableRow: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Delete a row from tbTrackerManage. Optionally archive (hide) the corresponding sheet.
+ */
+function deleteManageTableRow(uniqueId, archiveSheet) {
+  try {
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) throw new Error('tbTrackerManage sheet not found.');
+    var data = sheet.getDataRange().getValues();
+    var tableName = '';
+    var rowIndex = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(uniqueId).trim()) {
+        tableName = String(data[i][1] || '').trim();
+        rowIndex = i;
+        break;
+      }
+    }
+    if (rowIndex < 0) throw new Error('Record not found.');
+    if (archiveSheet && tableName) {
+      var targetSheet = ss.getSheetByName(tableName);
+      if (targetSheet) targetSheet.hideSheet();
+    }
+    var newData = data.slice(0, rowIndex).concat(data.slice(rowIndex + 1));
+    sheet.clear();
+    if (newData.length > 0) batchSetValues(sheet, 1, 1, newData);
+    return { success: true, message: 'Record removed.' };
+  } catch (e) {
+    console.error('deleteManageTableRow: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Sync: verify the sheet exists and update status if needed.
+ */
+function syncManageTableRow(uniqueId) {
+  try {
+    var ss = getDbConnection();
+    var sheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (!sheet) throw new Error('tbTrackerManage sheet not found.');
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(uniqueId).trim()) {
+        var tableName = String(data[i][1] || '').trim();
+        var targetSheet = ss.getSheetByName(tableName);
+        var status = targetSheet ? 'Active' : 'Archived';
+        sheet.getRange(i + 1, 5).setValue(status);
+        return { success: true, status: status, tableName: tableName };
+      }
+    }
+    throw new Error('Record not found.');
+  } catch (e) {
+    console.error('syncManageTableRow: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Returns list of yearly tables: { id, tableName, createdAt, year }.
+ * Prefers tbTrackerManage when it exists (Status=Active). Falls back to _TableMetadata + sheet scan.
+ */
+function getYearlyTablesMetadata() {
+  try {
+    var ss = getDbConnection();
+    var manageSheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+    if (manageSheet) {
+      var data = manageSheet.getDataRange().getValues();
+      var out = [];
+      if (ss.getSheetByName(TRACKER_TEMPLATE_SHEET)) {
+        out.push({ id: 'legacy', tableName: TRACKER_TEMPLATE_SHEET, createdAt: '', year: '' });
+      }
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        if (row[0] && String(row[4] || 'Active').trim() === 'Active') {
+          out.push({
+            id: String(row[0]).trim(),
+            tableName: String(row[1] || '').trim(),
+            createdAt: row[3] ? (row[3] instanceof Date ? row[3].toISOString() : String(row[3])) : '',
+            year: String(row[2] || '').trim()
+          });
+        }
+      }
+      if (out.length > 0) return out.sort(function (a, b) {
+        if (!a.year && b.year) return 1;
+        if (a.year && !b.year) return -1;
+        return (b.year || '').localeCompare(a.year || '');
+      });
+    }
+    var seen = {};
+    var out = [];
+    if (ss.getSheetByName(TRACKER_TEMPLATE_SHEET)) {
+      out.push({ id: 'legacy', tableName: TRACKER_TEMPLATE_SHEET, createdAt: '', year: '' });
+      seen[TRACKER_TEMPLATE_SHEET] = true;
+    }
+    var metaSheet = ss.getSheetByName(TRACKER_METADATA_SHEET);
+    if (metaSheet) {
+      var data = metaSheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        if (row[0] && row[1] && !seen[row[1]]) {
+          seen[row[1]] = true;
+          var name = String(row[1]).trim();
+          var year = name.indexOf('AppTracker_') === 0 ? name.replace('AppTracker_', '') : '';
+          out.push({
+            id: String(row[0]).trim(),
+            tableName: name,
+            createdAt: row[2] ? (row[2] instanceof Date ? row[2].toISOString() : String(row[2])) : '',
+            year: year
+          });
+        }
+      }
+    }
+    var sheets = ss.getSheets();
+    for (var j = 0; j < sheets.length; j++) {
+      var n = sheets[j].getName();
+      if (n.indexOf('AppTracker_') === 0 && !seen[n]) {
+        seen[n] = true;
+        out.push({ id: n, tableName: n, createdAt: '', year: n.replace('AppTracker_', '') });
+      }
+    }
+    return out.sort(function (a, b) { return (b.tableName || '').localeCompare(a.tableName || ''); });
+  } catch (e) {
+    console.error('getYearlyTablesMetadata: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Copy data validation rules from template to target sheet.
+ * Uses setDataValidations(getDataValidations()) for explicit sync of dropdowns and date constraints.
+ */
+function copyDataValidationFromTemplate(template, targetSheet) {
+  try {
+    var lastRow = Math.max(2, template.getLastRow());
+    var numCols = 18;
+    var srcRange = template.getRange(1, 1, lastRow, numCols);
+    var tgtRange = targetSheet.getRange(1, 1, lastRow, numCols);
+    var validations = srcRange.getDataValidations();
+    tgtRange.setDataValidations(validations);
+  } catch (e) {
+    console.warn('copyDataValidationFromTemplate: ' + e.message);
+  }
+}
+
+/**
+ * Archive (hide) the legacy AppTracker sheet if it exists and does not follow AppTracker_YYYY.
+ */
+function archiveLegacyTrackerSheet() {
+  try {
+    var ss = getDbConnection();
+    var legacy = ss.getSheetByName('AppTracker');
+    if (legacy) {
+      legacy.hideSheet();
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn('archiveLegacyTrackerSheet: ' + e.message);
+    return false;
+  }
+}
+
+/**
+ * Create a new yearly tracker sheet from template. Copies data validation. Registers in metadata.
+ */
+function initializeYearlyTable(year) {
+  try {
+    var yearStr = String(year || '').trim();
+    if (!yearStr || yearStr.length !== 4) throw new Error('Invalid year. Use 4 digits (e.g. 2026).');
+    var yearNum = parseInt(yearStr, 10);
+    if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2100) throw new Error('Year must be between 2020 and 2100.');
+    var tableName = 'AppTracker_' + yearStr;
+    var ss = getDbConnection();
+    var existing = ss.getSheetByName(tableName);
+    if (existing) {
+      var isHidden = false;
+      try { isHidden = typeof existing.isSheetHidden === 'function' && existing.isSheetHidden(); } catch (_) {}
+      if (isHidden) {
+        existing.showSheet();
+        checkAndCreateManageSheet();
+        var manageSheet = ss.getSheetByName(TRACKER_MANAGE_SHEET);
+        if (manageSheet) {
+          var data = manageSheet.getDataRange().getValues();
+          var found = false;
+          for (var r = 1; r < data.length; r++) {
+            if (String(data[r][1] || '').trim() === tableName) {
+              manageSheet.getRange(r + 1, 5).setValue('Active');
+              found = true;
+              break;
+            }
+          }
+          if (!found) addManageTableRow(tableName, yearStr, yearStr);
+        }
+        return { success: true, tableName: tableName, restored: true, message: 'Table for ' + yearStr + ' restored (was hidden).' };
+      }
+      throw new Error('Sheet for ' + yearStr + ' already exists.');
+    }
+    var template = ss.getSheetByName(TRACKER_TEMPLATE_SHEET);
+    if (!template) {
+      var legacy = ss.getSheetByName('AppTracker');
+      if (!legacy) throw new Error('Template is missing. Create AppTracker_Template or AppTracker sheet first.');
+      var headers = legacy.getRange(1, 1, 1, 18).getValues();
+      template = ss.insertSheet(TRACKER_TEMPLATE_SHEET);
+      template.getRange(1, 1, 1, 18).setValues(headers);
+      template.getRange(1, 1, 1, 18).setFontWeight('bold');
+      template.hideSheet();
+    }
+    var newSheet = template.copyTo(ss);
+    newSheet.setName(tableName);
+    newSheet.showSheet();
+    copyDataValidationFromTemplate(template, newSheet);
+    var metaSheet = getOrCreateMetadataSheet(ss);
+    var id = Utilities.getUuid().substring(0, 8);
+    var createdAt = new Date().toISOString();
+    metaSheet.appendRow([id, tableName, createdAt]);
+    return { success: true, tableName: tableName, id: id, createdAt: createdAt };
+  } catch (e) {
+    console.error('initializeYearlyTable: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * Delete an application record by year and serial (unique ID).
+ */
+function deleteApplicationRecord(year, uniqueId) {
+  try {
+    var sheetName = getTrackerSheetName(year);
+    var res = deleteRecord(uniqueId, sheetName, 1);
+    if (res.success) res.message = 'Record successfully removed from ' + (year || 'Legacy') + ' Tracker.';
+    return res;
+  } catch (e) {
+    console.error('deleteApplicationRecord: ' + e.message);
+    return { success: false, message: e.message };
+  }
+}
+
+/**
+ * One-shot fetch: metadata from tbTrackerManage + row data for each active year.
+ * Returns { metadata: [...], years: { '2026': [...], '2025': [...], 'legacy': [...] }, provinces: [...] }.
+ * Uses defaultProv for backward compatibility; pass empty string to getTrackerDataByProvince for "All Provinces".
+ */
+function fetchAllYearlyData() {
+  try {
+    var ss = getDbConnection();
+    checkAndCreateManageSheet();
+    archiveLegacyTrackerSheet();
+    var rawMeta = getManageTableMetadata().filter(function (m) { return String(m.status || 'Active').trim() === 'Active'; });
+    var metadata = rawMeta.map(function(m) { return { id: m.uniqueId, tableName: m.tableName, year: m.year, displayLabel: m.displayLabel, uniqueId: m.uniqueId }; });
+    var provinces = getProvincesForTrackerTabs();
+    var years = {};
+    for (var i = 0; i < metadata.length; i++) {
+      var m = metadata[i];
+      var year = String(m.year || '').trim();
+      var key = year || 'legacy';
+      try {
+        var data = getTrackerDataByProvince('', year);
+        years[key] = data || [];
+      } catch (err) {
+        years[key] = [];
+      }
+    }
+    if (ss.getSheetByName(TRACKER_TEMPLATE_SHEET)) {
+      var hasLegacy = metadata.some(function(x) { return x.tableName === TRACKER_TEMPLATE_SHEET; });
+      if (!hasLegacy) {
+        metadata.unshift({ id: 'legacy', year: '', tableName: TRACKER_TEMPLATE_SHEET, displayLabel: 'temp', uniqueId: 'legacy' });
+      }
+      if (!years['legacy']) {
+        try {
+          years['legacy'] = getTrackerDataByProvince('', '');
+        } catch (e) {
+          years['legacy'] = [];
+        }
+      }
+    }
+    return { metadata: metadata, years: years, provinces: provinces };
+  } catch (e) {
+    console.error('fetchAllYearlyData: ' + e.message);
+    throw new Error(e.message);
+  }
+}
+
+/**
+ * One-shot batch fetch: metadata, all row data for every active year, provinces, sectors.
+ * Single server call for maximum speed. Client uses this for instant filtering and rendering.
+ */
+function fetchOneShotAppDataModel() {
+  try {
+    var sectors = getSectorList();
+    var payload = fetchAllYearlyData();
+    payload.sectors = sectors || [];
+    return payload;
+  } catch (e) {
+    console.error('fetchOneShotAppDataModel: ' + e.message);
+    throw new Error(e.message);
+  }
+}
 
 function batchSetValues(sheet, startRow, startCol, twoDimArray) {
   if (!twoDimArray || twoDimArray.length === 0) return;
@@ -49,17 +473,15 @@ function batchSetValues(sheet, startRow, startCol, twoDimArray) {
 }
 
 /**
- * Repository: Fetch and map tracker data
- * This is the function called by your JavaScript.html
+ * Repository: Fetch and map tracker data. Optional targetYear routes to AppTracker_YYYY.
  */
-function getTrackerData() {
+function getTrackerData(targetYear) {
   try {
-    const ss = getDbConnection(); 
-    const sheet = ss.getSheetByName('AppTracker');
+    const ss = getDbConnection();
+    const sheetName = getTrackerSheetName(targetYear);
+    const sheet = ss.getSheetByName(sheetName);
     
-    if (!sheet) {
-      throw new Error("Sheet tab named 'AppTracker' not found.");
-    }
+    if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
     
     const values = sheet.getDataRange().getValues();
     
@@ -144,21 +566,71 @@ function getProvincesForTrackerTabs() {
 }
 
 /**
- * Tracker data filtered by province name (column L). Used when a province tab is active.
+ * Tracker data filtered by province name (column L). Optional targetYear routes to AppTracker_YYYY.
  */
-function getTrackerDataByProvince(provinceName) {
-  var all = getTrackerData();
-  if (!provinceName || !provinceName.trim()) return all;
-  var match = String(provinceName).trim().toLowerCase();
-  return all.filter(function (row) {
-    return String(row.province || '').trim().toLowerCase() === match;
-  });
+function getTrackerDataByProvince(provinceName, targetYear) {
+  try {
+    var ss = getDbConnection();
+    var sheetName = getTrackerSheetName(targetYear);
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
+    var values = sheet.getDataRange().getValues();
+    if (values.length <= 1) return [];
+    var headers = values.shift();
+    var provinceCol = 11; // Column L
+    var match = (provinceName && String(provinceName).trim()) ? String(provinceName).trim().toLowerCase() : null;
+    if (match) {
+      values = values.filter(function (row) {
+        return String(row[provinceCol] || '').trim().toLowerCase() === match;
+      });
+    }
+    values.sort(function (a, b) {
+      var dateA = new Date(a[0]);
+      var dateB = new Date(b[0]);
+      return dateB - dateA;
+    });
+    var hasNewCols = function (r) { return r && r.length >= 18; };
+    var normalizeType = function (val) {
+      var t = String(val || '').trim();
+      return (t === 'Bulk' || t.toLowerCase() === 'bulk') ? 'Bulk' : 'Individual';
+    };
+    var normalizeCert = function (val) {
+      var t = String(val || '').trim();
+      return (t === 'Revoked' || t.toLowerCase() === 'revoked') ? 'Revoked' : 'Active';
+    };
+    return values.map(function (row, index) {
+      return {
+        rowNumber: index + 1,
+        serial: row[1] || '',
+        lastName: row[2] || '',
+        firstName: row[3] || '',
+        middleName: row[4] || '',
+        suffix: row[5] || '',
+        email: row[6] || '',
+        contact: row[7] || '',
+        gender: row[8] || '',
+        agency: row[9] || '',
+        sector: row[10] || '',
+        province: row[11] || '',
+        city: row[12] || '',
+        district: row[13] || '',
+        interviewDate: row[14] instanceof Date ? row[14].toLocaleDateString() : (row[14] || ''),
+        typeOfApplication: hasNewCols(row) ? normalizeType(row[16]) : 'Individual',
+        certificateStatus: hasNewCols(row) ? normalizeCert(row[17]) : 'Active',
+        fileUrl: hasNewCols(row) ? (row[15] || '') : (row[15] || '')
+      };
+    });
+  } catch (e) {
+    console.error(e.toString());
+    throw new Error('Database Error: ' + e.message);
+  }
 }
 
-function getNextUserNumber(domain, provCode) {
+function getNextUserNumber(domain, provCode, targetYear) {
   try {
     const ss = getDbConnection();
-    const sheet = ss.getSheetByName('AppTracker');
+    const sheetName = getTrackerSheetName(targetYear);
+    const sheet = ss.getSheetByName(sheetName);
     const data = sheet.getDataRange().getValues();
     
     let startAt = 1;
@@ -205,11 +677,12 @@ function toProperCase(str) {
 /**
  * CRUD all data to Spreadsheet, including the hidden Timestamp
  */
-function saveApplication(formData, fileData) {
+function saveApplication(formData, fileData, targetYear) {
   try {
     const ss = getDbConnection();
-    const sheet = ss.getSheetByName('AppTracker');
-    if (!sheet) throw new Error("Sheet 'AppTracker' not found.");
+    const sheetName = getTrackerSheetName(targetYear);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
 
     // --- 1. DATA SANITIZATION ---
     formData.email = formData.email ? formData.email.trim().toLowerCase() : "";
@@ -332,22 +805,20 @@ function saveApplication(formData, fileData) {
 }
 
 /**
- * GETS A SINGLE RECORD BY SERIAL NUMBER
+ * GETS A SINGLE RECORD BY SERIAL NUMBER. Optional targetYear routes to AppTracker_YYYY.
  */
-function getRecordBySerial(serial) {
+function getRecordBySerial(serial, targetYear) {
   try {
     const ss = getDbConnection();
-    const sheet = ss.getSheetByName("AppTracker"); 
-    
-    if (!sheet) {
-      throw new Error("Sheet tab 'AppTracker' not found!");
-    }
+    const sheetName = getTrackerSheetName(targetYear);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
 
     const data = sheet.getDataRange().getValues();
     
     const hasNewCols = (r) => r && r.length >= 18;
     for (let i = 1; i < data.length; i++) {
-      if (data[i][1] == serial) {
+      if (data[i][1] == serial) { 
         const row = data[i];
         const fileUrlCol = hasNewCols(row) ? 15 : 15;
         return {
@@ -383,8 +854,8 @@ function getRecordBySerial(serial) {
  * One-call load for Edit form: record + province list + city list for that record's domain/province.
  * Reduces 3 round-trips to 1 so the edit modal appears faster.
  */
-function getRecordBySerialForEdit(serial) {
-  var record = getRecordBySerial(serial);
+function getRecordBySerialForEdit(serial, targetYear) {
+  var record = getRecordBySerial(serial, targetYear);
   if (!record) return null;
   var domain = String(record.serial || "").substring(0, 3);
   var provList = getUniqueProvincesFromCitiesByDomain(domain);
@@ -450,9 +921,11 @@ function deleteRecord(id, sheetName, colIndex) {
   }
 }
 
-function processBulkUpload(dataRows) {
+function processBulkUpload(dataRows, targetYear) {
   const ss = getDbConnection();
-  const sheet = ss.getSheetByName('AppTracker');
+  const sheetName = getTrackerSheetName(targetYear);
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error("Sheet '" + sheetName + "' not found.");
   const lastRow = sheet.getLastRow();
   const sessionCounters = {};
   const uploadTimestamp = new Date();
@@ -469,7 +942,7 @@ function processBulkUpload(dataRows) {
       sessionCounters[counterKey]++;
       nextNum = sessionCounters[counterKey];
     } else {
-      nextNum = getNextUserNumber(domain, provCode);
+      nextNum = getNextUserNumber(domain, provCode, targetYear);
       sessionCounters[counterKey] = nextNum;
     }
 

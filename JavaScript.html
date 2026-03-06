@@ -8,8 +8,9 @@
 
   // --- 1. INITIALIZE SELECT2 ON LOAD ---
 $(document).ready(function() {
+  try {
   // 1. INITIALIZE ADD MODAL AGENCY (dropdownParent + dropdownCssClass for mobile)
-  $('#agency').select2({
+  if ($('#agency').length) $('#agency').select2({
     theme: "bootstrap-5",
     placeholder: "Search for an Agency...",
     allowClear: true,
@@ -17,9 +18,7 @@ $(document).ready(function() {
     dropdownParent: $('#addApplicationModal'),
     dropdownCssClass: 'select2-dropdown-in-modal'
   });
-
-  // 2. INITIALIZE EDIT MODAL AGENCY (Crucial for Fetching to work)
-  $('#editAgency').select2({
+  if ($('#editAgency').length) $('#editAgency').select2({
     theme: "bootstrap-5",
     placeholder: "Search for an Agency...",
     allowClear: true,
@@ -27,9 +26,7 @@ $(document).ready(function() {
     dropdownParent: $('#editApplicationModal'),
     dropdownCssClass: 'select2-dropdown-in-modal'
   });
-
-  // 3. INITIALIZE ADD MODAL CITY/MUNICIPALITY (searchable, same modal/mobile behavior)
-  $('#citySelect').select2({
+  if ($('#citySelect').length) $('#citySelect').select2({
     theme: "bootstrap-5",
     placeholder: "Search for City/Municipality...",
     allowClear: true,
@@ -37,9 +34,7 @@ $(document).ready(function() {
     dropdownParent: $('#addApplicationModal'),
     dropdownCssClass: 'select2-dropdown-in-modal'
   });
-
-  // 4. INITIALIZE EDIT MODAL CITY/MUNICIPALITY
-  $('#editCitySelect').select2({
+  if ($('#editCitySelect').length) $('#editCitySelect').select2({
     theme: "bootstrap-5",
     placeholder: "Search for City/Municipality...",
     allowClear: true,
@@ -48,10 +43,8 @@ $(document).ready(function() {
     dropdownCssClass: 'select2-dropdown-in-modal'
   });
 
-  // 5. Populate Sector dropdowns from Sector sheet (alias shown, value = code for serial)
-  populateSectorDropdowns();
-
-  // 6. GLOBAL MODAL RESET (Resumes table refresh when modal closes)
+  if (typeof populateSectorDropdowns === 'function') populateSectorDropdowns();
+  } catch (e) { console.error('Init error:', e); }
   $('.modal').on('hidden.bs.modal', function () {
     isModalOpen = false;
   });
@@ -59,37 +52,37 @@ $(document).ready(function() {
 
   /** Cache for one-shot view fetch — sidebar switches with no loading; tables auto-load when view is shown. */
   var viewCache = {};
+  /** One-shot app data: metadata, years (all row data per year), provinces, sectors. Single fetch on load. */
+  var appData = null;
 
   /**
    * PNPKI DMS GLOBAL INITIALIZATION
-   * One-shot fetch all views so sidebar navigation is instant and tables auto-load.
+   * Single batch fetch: views + app data (metadata, all tracker rows, provinces, sectors). Zero server calls after load.
    */
   window.onload = function () {
-    function hideOverlay() {
-      var el = document.getElementById('loadingOverlay');
-      if (el) el.classList.remove('show');
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      var vc = document.getElementById('view-container');
+      if (vc) vc.innerHTML = '<div class="alert alert-warning m-3">This app must run as a Google Apps Script Web App. Open it from the deployed URL.</div>';
+      return;
     }
-    var overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-      var titleEl = document.getElementById('overlayTitle');
-      var msgEl = document.getElementById('overlayMessage');
-      if (titleEl) titleEl.innerText = 'Preparing...';
-      if (msgEl) msgEl.innerText = 'Loading views...';
-      overlay.classList.add('show');
-    }
-    var overlayTimeout = setTimeout(hideOverlay, 3000);
 
     google.script.run
       .withSuccessHandler(function (views) {
-        clearTimeout(overlayTimeout);
         if (views && typeof views === 'object') viewCache = views;
-        hideOverlay();
+      })
+      .withFailureHandler(function () {})
+      .getAllViews();
+
+    google.script.run
+      .withSuccessHandler(function (data) {
+        appData = data || {};
+        renderSidebar(appData.metadata || []);
       })
       .withFailureHandler(function () {
-        clearTimeout(overlayTimeout);
-        hideOverlay();
+        appData = { metadata: [], years: {}, provinces: [], sectors: [] };
+        renderSidebar([]);
       })
-      .getAllViews();
+      .fetchOneShotAppData();
 
     google.script.run
       .withSuccessHandler(function (email) {
@@ -98,6 +91,83 @@ $(document).ready(function() {
       })
       .getAuthenticatedUser();
   };
+
+  /**
+   * Render sidebar sub-menus from tbTrackerManage (source of truth).
+   * Years first (descending), then "temp" (legacy) last.
+   */
+  function renderSidebar(metadata) {
+    var submenu = document.getElementById('sidebarTrackerSubmenu');
+    if (!submenu) return;
+    var active = (metadata || []).filter(function (m) { return String(m.status || 'Active').trim() === 'Active'; });
+    var years = active.filter(function (m) { return (m.year || '').trim() !== ''; }).sort(function (a, b) { return (b.year || '').localeCompare(a.year || ''); });
+    var html = '';
+    years.forEach(function (m) {
+      var year = (m.year || '').trim();
+      var label = (m.displayLabel || '').trim() || year;
+      html += '<li class="nav-item"><a class="nav-link sidebar-tracker-year" href="javascript:void(0);" data-year="' + year + '" onclick="loadTrackerYear(\'' + year.replace(/'/g, "\\'") + '\'); setSidebarYearActive(this);"><i class="bi bi-calendar3 me-2"></i><span class="sidebar-label">' + (label || year) + '</span></a></li>';
+    });
+    html += '<li class="nav-item"><a class="nav-link sidebar-tracker-year" href="javascript:void(0);" data-year="legacy" onclick="loadTrackerYear(\'legacy\'); setSidebarYearActive(this);"><i class="bi bi-archive me-2"></i><span class="sidebar-label">temp</span></a></li>';
+    submenu.innerHTML = html || '<li class="nav-item"><span class="small text-muted px-2">No tables yet</span></li>';
+  }
+
+  function setSidebarYearActive(el) {
+    var submenu = document.getElementById('sidebarTrackerSubmenu');
+    if (submenu) submenu.querySelectorAll('.nav-link').forEach(function (a) { a.classList.remove('active'); });
+    if (el) el.classList.add('active');
+  }
+
+  function toggleSidebarTracker() {
+    var parent = document.querySelector('.sidebar-tracker-parent');
+    if (parent) parent.classList.toggle('expanded');
+    var toggle = document.getElementById('sidebarTrackerToggle');
+    if (toggle) toggle.setAttribute('aria-expanded', parent && parent.classList.contains('expanded') ? 'true' : 'false');
+  }
+
+  /**
+   * Single-Table Display: show only the specified year's table. Hides all other year containers.
+   * Handles DataTable columns.adjust() for header alignment.
+   */
+  function showTable(year) {
+    var containers = document.querySelectorAll('.year-container');
+    var target = document.getElementById('container-' + year);
+    containers.forEach(function (el) {
+      if (el.id === 'container-' + year) {
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var tableId = 'table-' + year;
+      if (typeof $ !== 'undefined' && $.fn.DataTable && $.fn.DataTable.isDataTable('#' + tableId)) {
+        $('#' + tableId).DataTable().columns.adjust();
+      }
+    }
+    window.activeTrackerYear = year;
+  }
+
+  /**
+   * Load Tracker view and display only the specified year's table.
+   */
+  function loadTrackerYear(year) {
+    loadView('Tracker');
+    var sidebarEl = document.getElementById('sidebarMenu');
+    if (sidebarEl && window.matchMedia('(max-width: 767.98px)').matches) {
+      var collapse = bootstrap.Collapse.getInstance(sidebarEl);
+      if (collapse) collapse.hide();
+    }
+    if (year) {
+      function applyView() {
+        showTable(year);
+        var link = document.querySelector('.sidebar-tracker-year[data-year="' + year + '"]');
+        if (link) setSidebarYearActive(link);
+      }
+      setTimeout(applyView, 150);
+      setTimeout(applyView, 500);
+    }
+  }
 
   // Sidebar collapse toggle (desktop / tablet)
   document.addEventListener('DOMContentLoaded', function() {
@@ -146,7 +216,7 @@ function loadView(viewName) {
     return;
   }
 
-  container.innerHTML = '<div class="d-flex justify-content-center align-items-center" style="min-height: 300px;"><div class="spinner-border text-primary" role="status"></div><span class="ms-3">Loading ' + viewName + '...</span></div>';
+  container.innerHTML = '';
   google.script.run
     .withSuccessHandler(function(html) {
       container.innerHTML = html;
@@ -159,10 +229,13 @@ function loadView(viewName) {
 }
 
 function initViewAfterLoad(viewName) {
+  if (viewName === 'Menu') {
+    initMenuManageDataTable();
+  }
   if (viewName === 'Tracker') {
     populateSectorDropdowns();
     populateTrackerProvincesAndCities();
-    initTrackerTable();
+    initTrackerOneShot();
   }
   if (viewName === 'Conducts') {
     initConductsTable();
@@ -178,27 +251,30 @@ function initViewAfterLoad(viewName) {
    * Populate Sector dropdowns from Sector sheet. Option value = code (for serial), text = alias (for display). Tracker stores alias in sheet.
    */
   function populateSectorDropdowns() {
-    google.script.run
-      .withSuccessHandler(function(list) {
-        var addSel = document.getElementById('sectorSelect');
-        var editSel = document.getElementById('editSectorSelect');
-        function addOption(sel, text, value, isPlaceholder) {
-          var opt = new Option(text, value || '');
-          if (isPlaceholder) opt.disabled = true;
-          sel.appendChild(opt);
-        }
-        if (addSel) {
-          addSel.innerHTML = '';
-          addOption(addSel, 'Select Sector...', '', true);
-          (list || []).forEach(function(s) { addOption(addSel, s.alias || s.name, s.code, false); });
-        }
-        if (editSel) {
-          editSel.innerHTML = '';
-          addOption(editSel, 'Select Sector...', '', true);
-          (list || []).forEach(function(s) { addOption(editSel, s.alias || s.name, s.code, false); });
-        }
-      })
-      .getSectorList();
+    function applyList(list) {
+      var addSel = document.getElementById('sectorSelect');
+      var editSel = document.getElementById('editSectorSelect');
+      function addOption(sel, text, value, isPlaceholder) {
+        var opt = new Option(text, value || '');
+        if (isPlaceholder) opt.disabled = true;
+        sel.appendChild(opt);
+      }
+      if (addSel) {
+        addSel.innerHTML = '';
+        addOption(addSel, 'Select Sector...', '', true);
+        (list || []).forEach(function(s) { addOption(addSel, s.alias || s.name, s.code, false); });
+      }
+      if (editSel) {
+        editSel.innerHTML = '';
+        addOption(editSel, 'Select Sector...', '', true);
+        (list || []).forEach(function(s) { addOption(editSel, s.alias || s.name, s.code, false); });
+      }
+    }
+    if (appData && appData.sectors && appData.sectors.length > 0) {
+      applyList(appData.sectors);
+      return;
+    }
+    google.script.run.withSuccessHandler(applyList).withFailureHandler(function() { applyList([]); }).getSectorList();
   }
 
   function setEditSectorByAlias(alias) {
@@ -239,8 +315,8 @@ function initViewAfterLoad(viewName) {
             if (!row) return '';
             var code = (row.code || '').replace(/'/g, "\\'");
             return '<div class="btn-group">' +
-              '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditSectorModal(\'' + code + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
-              '<button class="btn btn-sm btn-outline-danger" onclick="initiateSectorDelete(\'' + code + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
+              '<button class="btn btn-sm btn-outline-success me-1 action-icon-edit" onclick="openEditSectorModal(\'' + code + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger action-icon-delete" onclick="initiateSectorDelete(\'' + code + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
               '</div>';
           }
         }
@@ -275,17 +351,8 @@ function initViewAfterLoad(viewName) {
 
   function openEditSectorModal(code) {
     if (!code) return;
-    var overlay = document.getElementById('loadingOverlay');
-    var overlayTitle = document.getElementById('overlayTitle');
-    var overlayMessage = document.getElementById('overlayMessage');
-    if (overlay) {
-      if (overlayTitle) overlayTitle.innerText = 'Fetching Record...';
-      if (overlayMessage) overlayMessage.innerText = 'Loading sector data.';
-      overlay.classList.add('show');
-    }
     google.script.run
       .withSuccessHandler(function(row) {
-        if (overlay) overlay.classList.remove('show');
         if (!row) { alert('Sector not found.'); return; }
         document.getElementById('editSectorOldCode').value = row.code;
         document.getElementById('editSectorCode').value = row.code;
@@ -297,7 +364,6 @@ function initViewAfterLoad(viewName) {
         if (modal) bootstrap.Modal.getOrCreateInstance(modal).show();
       })
       .withFailureHandler(function(err) {
-        if (overlay) overlay.classList.remove('show');
         alert('Error loading sector: ' + (err && err.message ? err.message : err));
       })
       .getSectorByCode(code);
@@ -353,20 +419,13 @@ function initViewAfterLoad(viewName) {
   function initiateSectorDelete(code) {
     var modalEl = document.getElementById('deleteConfirmModal');
     var confirmBtn = document.getElementById('confirmDeleteBtn');
-    var overlay = document.getElementById('loadingOverlay');
     if (!modalEl || !confirmBtn) return;
     var deleteModal = new bootstrap.Modal(modalEl);
     deleteModal.show();
     confirmBtn.onclick = function() {
       deleteModal.hide();
-      if (overlay) {
-        document.getElementById('overlayTitle').innerText = 'Deleting...';
-        document.getElementById('overlayMessage').innerText = 'Removing sector ' + code;
-        overlay.classList.add('show');
-      }
       google.script.run
         .withSuccessHandler(function(res) {
-          if (overlay) overlay.classList.remove('show');
           if (res.success) {
             initSectorDataTable();
             populateSectorDropdowns();
@@ -382,7 +441,6 @@ function initViewAfterLoad(viewName) {
           }
         })
         .withFailureHandler(function(err) {
-          if (overlay) overlay.classList.remove('show');
           alert('Error: ' + (err && err.message ? err.message : err));
         })
         .deleteRecord(code, 'Sector', 4);
@@ -414,8 +472,8 @@ function initViewAfterLoad(viewName) {
             var code = (row.provinceCode || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             var city = (row.city || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             return '<div class="btn-group">' +
-              '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditCityModal(\'' + dom + '\', \'' + code + '\', \'' + city + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
-              '<button class="btn btn-sm btn-outline-danger" onclick="initiateCityDelete(\'' + dom + '\', \'' + code + '\', \'' + city + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
+              '<button class="btn btn-sm btn-outline-success me-1 action-icon-edit" onclick="openEditCityModal(\'' + dom + '\', \'' + code + '\', \'' + city + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger action-icon-delete" onclick="initiateCityDelete(\'' + dom + '\', \'' + code + '\', \'' + city + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
               '</div>';
           }
         }
@@ -554,17 +612,8 @@ function initViewAfterLoad(viewName) {
 
   function openEditCityModal(domainCode, provinceCode, cityName) {
     if (!provinceCode && !cityName) return;
-    var overlay = document.getElementById('loadingOverlay');
-    var overlayTitle = document.getElementById('overlayTitle');
-    var overlayMessage = document.getElementById('overlayMessage');
-    if (overlay) {
-      if (overlayTitle) overlayTitle.innerText = 'Fetching Record...';
-      if (overlayMessage) overlayMessage.innerText = 'Loading city data.';
-      overlay.classList.add('show');
-    }
     google.script.run
       .withSuccessHandler(function(row) {
-        if (overlay) overlay.classList.remove('show');
         if (!row) { alert('City not found.'); return; }
         document.getElementById('editCityOldDomain').value = row.domainCode || '';
         document.getElementById('editCityOldProvinceCode').value = row.provinceCode;
@@ -589,7 +638,6 @@ function initViewAfterLoad(viewName) {
         if (modal) bootstrap.Modal.getOrCreateInstance(modal).show();
       })
       .withFailureHandler(function(err) {
-        if (overlay) overlay.classList.remove('show');
         alert('Error: ' + (err && err.message ? err.message : err));
       })
       .getCityByCodeAndCity(domainCode, provinceCode, cityName);
@@ -650,20 +698,13 @@ function initViewAfterLoad(viewName) {
   function initiateCityDelete(domainCode, provinceCode, cityName) {
     var modalEl = document.getElementById('deleteConfirmModal');
     var confirmBtn = document.getElementById('confirmDeleteBtn');
-    var overlay = document.getElementById('loadingOverlay');
     if (!modalEl || !confirmBtn) return;
     var deleteModal = new bootstrap.Modal(modalEl);
     deleteModal.show();
     confirmBtn.onclick = function() {
       deleteModal.hide();
-      if (overlay) {
-        document.getElementById('overlayTitle').innerText = 'Deleting...';
-        document.getElementById('overlayMessage').innerText = 'Removing city ' + cityName;
-        overlay.classList.add('show');
-      }
       google.script.run
         .withSuccessHandler(function(res) {
-          if (overlay) overlay.classList.remove('show');
           if (res.success) {
             initCitiesDataTable();
             populateTrackerProvincesAndCities();
@@ -677,7 +718,6 @@ function initViewAfterLoad(viewName) {
           } else alert(res.message || 'Delete failed.');
         })
         .withFailureHandler(function(err) {
-          if (overlay) overlay.classList.remove('show');
           alert('Error: ' + (err && err.message ? err.message : err));
         })
         .deleteCity(domainCode, provinceCode, cityName);
@@ -711,8 +751,8 @@ function initViewAfterLoad(viewName) {
             if (!row) return '';
             var uid = (row.uniqueId || '').replace(/'/g, "\\'");
             return '<div class="btn-group">' +
-              '<button class="btn btn-sm btn-outline-warning me-1" onclick="openEditAgencyModal(\'' + uid + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
-              '<button class="btn btn-sm btn-outline-danger" onclick="initiateAgencyDelete(\'' + uid + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
+              '<button class="btn btn-sm btn-outline-success me-1 action-icon-edit" onclick="openEditAgencyModal(\'' + uid + '\')" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger action-icon-delete" onclick="initiateAgencyDelete(\'' + uid + '\')" title="Delete"><i class="bi bi-trash"></i></button>' +
               '</div>';
           }
         }
@@ -806,15 +846,8 @@ function initViewAfterLoad(viewName) {
 
   function openEditAgencyModal(uniqueId) {
     if (!uniqueId) return;
-    var overlay = document.getElementById('loadingOverlay');
-    if (overlay) {
-      document.getElementById('overlayTitle').innerText = 'Fetching Record...';
-      document.getElementById('overlayMessage').innerText = 'Loading agency data.';
-      overlay.classList.add('show');
-    }
     google.script.run
       .withSuccessHandler(function(row) {
-        if (overlay) overlay.classList.remove('show');
         if (!row) { alert('Agency not found.'); return; }
         document.getElementById('editAgencyOldUniqueId').value = row.uniqueId;
         document.getElementById('editAgencyName').value = row.agencyName || '';
@@ -837,7 +870,6 @@ function initViewAfterLoad(viewName) {
         if (modal) bootstrap.Modal.getOrCreateInstance(modal).show();
       })
       .withFailureHandler(function(err) {
-        if (overlay) overlay.classList.remove('show');
         alert('Error: ' + (err && err.message ? err.message : err));
       })
       .getAgencyByUniqueId(uniqueId);
@@ -892,20 +924,13 @@ function initViewAfterLoad(viewName) {
   function initiateAgencyDelete(uniqueId) {
     var modalEl = document.getElementById('deleteConfirmModal');
     var confirmBtn = document.getElementById('confirmDeleteBtn');
-    var overlay = document.getElementById('loadingOverlay');
     if (!modalEl || !confirmBtn) return;
     var deleteModal = new bootstrap.Modal(modalEl);
     deleteModal.show();
     confirmBtn.onclick = function() {
       deleteModal.hide();
-      if (overlay) {
-        document.getElementById('overlayTitle').innerText = 'Deleting...';
-        document.getElementById('overlayMessage').innerText = 'Removing agency.';
-        overlay.classList.add('show');
-      }
       google.script.run
         .withSuccessHandler(function(res) {
-          if (overlay) overlay.classList.remove('show');
           if (res.success) {
             initAgencyDataTable();
             var successEl = document.getElementById('successModal');
@@ -918,7 +943,6 @@ function initViewAfterLoad(viewName) {
           } else alert(res.message || 'Delete failed.');
         })
         .withFailureHandler(function(err) {
-          if (overlay) overlay.classList.remove('show');
           alert('Error: ' + (err && err.message ? err.message : err));
         })
         .deleteAgency(uniqueId);
@@ -982,13 +1006,16 @@ function initViewAfterLoad(viewName) {
    * SIDEBAR UI MANAGER
    */
   function updateActiveLink(viewName) {
-    document.querySelectorAll('.nav-link').forEach(link => {
+    document.querySelectorAll('.sidebar-nav-main').forEach(function(link) {
       link.classList.remove('active');
-      const onclickAttr = link.getAttribute('onclick') || "";
-      if (onclickAttr.includes(`'${viewName}'`)) {
-        link.classList.add('active');
-      }
+      var onclickAttr = link.getAttribute('onclick') || '';
+      if (onclickAttr.indexOf("'" + viewName + "'") >= 0) link.classList.add('active');
     });
+    var trackerToggle = document.getElementById('sidebarTrackerToggle');
+    if (trackerToggle) {
+      if (viewName === 'Tracker') trackerToggle.classList.add('active');
+      else trackerToggle.classList.remove('active');
+    }
   }
 
   /**
@@ -1015,13 +1042,35 @@ function initViewAfterLoad(viewName) {
   }
 
   /**
-   * DATATABLE INITIALIZATION (View.Tracker.Index)
-   * Table is created immediately with empty data so it shows without delay; data is loaded and filled when getTrackerData() returns.
+   * Toggle year-specific collapsible. Uses max-height transition.
    */
-  function createTrackerDataTable(data) {
-    const tableSelector = '#trackerTable';
-    const isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 767.98px)').matches;
-    const fixedCols = isSmallScreen ? { right: 1, left: 0 } : { right: 1, left: 2 };
+  function toggleTrackerYearCollapse(year) {
+    var content = document.getElementById('container-' + year);
+    var header = document.getElementById('trackerHeader' + year);
+    if (!content || !header) return;
+    var isCollapsed = content.classList.contains('collapsed');
+    if (isCollapsed) {
+      content.classList.remove('collapsed');
+      header.setAttribute('aria-expanded', 'true');
+      header.querySelector('.category-collapse-icon-expanded').classList.remove('d-none');
+      header.querySelector('.category-collapse-icon-collapsed').classList.add('d-none');
+    } else {
+      content.classList.add('collapsed');
+      header.setAttribute('aria-expanded', 'false');
+      header.querySelector('.category-collapse-icon-expanded').classList.add('d-none');
+      header.querySelector('.category-collapse-icon-collapsed').classList.remove('d-none');
+    }
+  }
+  if (typeof window !== 'undefined') window.toggleTrackerYearCollapse = toggleTrackerYearCollapse;
+
+  /**
+   * Create DataTable for a specific year. tableId: table2024 or table2025.
+   */
+  function createTrackerDataTableForYear(tableId, year, data) {
+    var tableSelector = '#' + tableId;
+    var sheetName = year ? 'AppTracker_' + year : 'AppTracker';
+    var isSmallScreen = window.matchMedia && window.matchMedia('(max-width: 767.98px)').matches;
+    var fixedCols = isSmallScreen ? { right: 1, left: 0 } : { right: 1, left: 2 };
     $(tableSelector).DataTable({
       data: data || [],
       scrollX: true,
@@ -1041,72 +1090,392 @@ function initViewAfterLoad(viewName) {
         { data: "suffix" },
         { data: "email" },
         { data: "contact" },
-        { data: "gender" },
-        { data: "agency" },
-        { data: "sector" },
-        { data: "province" },
-        { data: "city" },
-        { data: "district" },
+        { data: "gender", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "agency", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "sector", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "province", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "city", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "district", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-neon">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
         { data: "interviewDate" },
-        { data: "typeOfApplication", width: "100px" },
-        { data: "certificateStatus", width: "90px" },
+        { data: "typeOfApplication", width: "100px", render: function(d) { return d ? '<span class="tracker-chip tracker-chip-type">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : ''; } },
+        { data: "certificateStatus", width: "90px", render: function(d) {
+          var t = (d && String(d).trim()) || '';
+          var isReject = t.toLowerCase() === 'reject' || t.toLowerCase() === 'revoked';
+          var cls = isReject ? 'tracker-chip tracker-chip-reject' : 'tracker-chip tracker-chip-neon';
+          return t ? '<span class="' + cls + '">' + String(d).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>' : '';
+        } },
         {
           data: "fileUrl",
           render: function(d, type, row) {
             if (!row) return '';
-            const escapedName = `${row.lastName}, ${row.firstName}`.replace(/'/g, "\\'");
-            let imageBtn = d
-              ? `<button class="btn btn-sm btn-outline-primary me-1" onclick="viewFile('${d}', '${row.serial}', '${escapedName}')">
-                  <i class="bi bi-file-earmark-image"></i>
-                 </button>`
-              : "";
-            return `<div class="btn-group">
-                      ${imageBtn}
-                      <button class="btn btn-sm btn-outline-warning me-1" onclick="manageFormModal('edit', '${row.serial}')">
-                        <i class="bi bi-pencil-square"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger" onclick="initiateDelete('${row.serial}')">
-                        <i class="bi bi-trash"></i>
-                      </button>
-                    </div>`;
+            var serialEsc = (row.serial || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var yearAttr = year === '' ? 'legacy' : year;
+            var escapedName = ((row.lastName || '') + ', ' + (row.firstName || '')).replace(/'/g, "\\'");
+            var imageBtn = d
+              ? '<button class="btn btn-sm btn-outline-primary me-1 action-icon-file" onclick="viewFile(\'' + d + '\', \'' + serialEsc + '\', \'' + escapedName + '\')" title="View"><i class="bi bi-file-earmark-image"></i></button>'
+              : '';
+            return '<div class="btn-group btn-group-sm flex-nowrap">' +
+              imageBtn +
+              '<button class="btn btn-sm btn-outline-success me-1 action-icon-edit" data-year="' + yearAttr + '" data-id="' + serialEsc + '" onclick="editEntry(this)" title="Edit"><i class="bi bi-pencil-square"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger action-icon-delete" data-year="' + yearAttr + '" data-id="' + serialEsc + '" onclick="deleteEntry(this)" title="Delete"><i class="bi bi-trash"></i></button>' +
+              '</div>';
           }
         }
       ],
       dom: '<"d-flex justify-content-between mb-3"lf>rt<"d-flex justify-content-between mt-3"ip>',
       initComplete: function() {
-        syncTrackerHeaderScroll();
-        attachTrackerScrollSync();
+        var w = document.querySelector(tableSelector) && document.querySelector(tableSelector).closest('.dataTables_wrapper');
+        if (w) {
+          var sb = w.querySelector('.dataTables_scrollBody');
+          var sh = w.querySelector('.dataTables_scrollHead');
+          if (sb && sh && !sb._trackerScrollSynced) {
+            sb._trackerScrollSynced = true;
+            sb.addEventListener('scroll', function() { sh.scrollLeft = sb.scrollLeft; });
+          }
+        }
       },
       drawCallback: function() {
-        syncTrackerHeaderScroll();
+        var w = document.querySelector(tableSelector) && document.querySelector(tableSelector).closest('.dataTables_wrapper');
+        if (w) {
+          var sb = w.querySelector('.dataTables_scrollBody');
+          var sh = w.querySelector('.dataTables_scrollHead');
+          if (sb && sh) sh.scrollLeft = sb.scrollLeft;
+        }
         if (this.columns) this.columns.adjust();
       }
     });
-    $(tableSelector).on('draw.dt', syncTrackerHeaderScroll);
+    $(tableSelector).on('draw.dt', function() {
+      var tbl = document.querySelector(tableSelector);
+      var w = tbl && tbl.closest('.dataTables_wrapper');
+      if (w) {
+        var sb = w.querySelector('.dataTables_scrollBody');
+        var sh = w.querySelector('.dataTables_scrollHead');
+        if (sb && sh && !sb._trackerScrollSynced) {
+          sb._trackerScrollSynced = true;
+          sb.addEventListener('scroll', function() { sh.scrollLeft = sb.scrollLeft; });
+        }
+      }
+    });
   }
 
-function initTrackerTable() {
+  /**
+   * Show toast/notification using successModal.
+   */
+  function showTrackerToast(message, type) {
+    type = type || 'success';
+    var el = document.getElementById('successModal');
+    if (!el) return;
+    document.getElementById('successModalTitle').innerText = type === 'error' ? 'Error' : 'Success';
+    document.getElementById('successModalMessage').innerText = message || '';
+    var modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
+    setTimeout(function() { modal.hide(); }, type === 'error' ? 3000 : 2000);
+  }
+
+  /**
+   * Targeted refresh: refetch year data, update appData, redraw DataTable. Preserves province filter.
+   */
+  function refreshTrackerYear(year) {
     if (isModalOpen) {
-      tableRefreshTimer = setTimeout(initTrackerTable, 3000);
+      tableRefreshTimer = setTimeout(function() { refreshTrackerYear(year); }, 3000);
       return;
     }
-    const tableSelector = '#trackerTable';
-    if ($.fn.DataTable.isDataTable(tableSelector)) {
-      google.script.run
-        .withSuccessHandler(function(data) {
-          $(tableSelector).DataTable().clear().rows.add(data).draw(false);
-          tableRefreshTimer = setTimeout(initTrackerTable, 5000);
-        })
-        .getTrackerData();
-      return;
-    }
-    createTrackerDataTable([]);
+    var key = (year === '' || year === null) ? 'legacy' : year;
+    var serverYear = (key === 'legacy') ? '' : key;
+    var tableSelector = '#table-' + key;
+    if (!appData) appData = { years: {} };
     google.script.run
       .withSuccessHandler(function(data) {
-        $(tableSelector).DataTable().clear().rows.add(data || []).draw(false);
-        tableRefreshTimer = setTimeout(initTrackerTable, 5000);
+        appData.years = appData.years || {};
+        appData.years[key] = data || [];
+        if (typeof $ !== 'undefined' && $.fn.DataTable && $.fn.DataTable.isDataTable(tableSelector)) {
+          $(tableSelector).DataTable().clear().rows.add(data || []).draw(false);
+          applyProvinceFilter(key);
+        }
       })
-      .getTrackerData();
+      .withFailureHandler(function() {
+        if (typeof $ !== 'undefined' && $.fn.DataTable && $.fn.DataTable.isDataTable(tableSelector)) {
+          $(tableSelector).DataTable().clear().draw(false);
+        }
+      })
+      .fetchTrackerYearData(serverYear);
+  }
+
+  /**
+   * Render yearly tracker cards. Each card is a year-container (Single-Table Display).
+   * Legacy is labeled "temp".
+   */
+  function renderYearlyCards(list) {
+    var container = document.getElementById('trackerYearlyCardsContainer');
+    if (!container) return;
+    if (!list || list.length === 0) {
+      container.innerHTML = '<div id="trackerSelectYearSplash" class="text-center text-muted py-5"><i class="bi bi-calendar3" style="font-size: 3rem;"></i><p class="mt-3 mb-0">Select a year from the sidebar</p><p class="small mt-1">No tables yet. Add a year via <strong>Menu</strong>.</p></div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      var key = (t.year !== undefined && t.year !== null && String(t.year).trim() !== '') ? String(t.year).trim() : 'legacy';
+      var header = (t.displayLabel || (key === 'legacy' ? 'temp' : (key + ' Application Tracker')));
+      if (key === 'legacy') header = 'temp';
+      var serverYear = key === 'legacy' ? '' : key;
+      html += '<div class="year-container tracker-year-card category-container-card mb-4 hidden" id="container-' + key + '">' +
+        '<div class="tracker-year-header d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 py-2">' +
+          '<h5 class="fw-bold text-dark m-0">' + header + '</h5>' +
+          '<div class="d-flex flex-nowrap align-items-center gap-2">' +
+            '<select id="trackerProvince' + key + '" class="form-select form-select-sm" style="width: auto; min-width: 140px;">' +
+              '<option value="" disabled>All Provinces</option>' +
+            '</select>' +
+            '<button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="downloadBulkTemplate();">' +
+              '<i class="bi bi-download me-1"></i>Template' +
+            '</button>' +
+            '<button type="button" class="btn btn-success btn-sm rounded-pill" onclick="document.getElementById(\'bulkUploadInput' + key + '\').click();">' +
+              '<i class="bi bi-file-earmark-excel me-1"></i>Bulk Upload' +
+            '</button>' +
+            '<input type="file" id="bulkUploadInput' + key + '" accept=".xlsx, .xls" style="display:none" onchange="handleBulkUpload(event, \'' + serverYear.replace(/'/g, "\\'") + '\')">' +
+            '<button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="manageFormModal(\'add\', null, \'' + serverYear.replace(/'/g, "\\'") + '\');">' +
+              '<i class="bi bi-plus-lg me-1"></i>New Application' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="p-3 p-md-4">' +
+          '<div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0; border-radius: 12px;">' +
+            '<table id="table-' + key + '" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">' +
+              '<thead class="bg-light">' +
+                '<tr>' +
+                  '<th>#</th><th>Serial Number</th><th>Last Name</th><th>First Name</th><th>Middle Name</th><th>Suffix</th>' +
+                  '<th>Email Address</th><th>Contact Number</th><th>Gender</th><th>Agency</th><th>Sector</th><th>Province</th>' +
+                  '<th>City/Municipality</th><th>District</th><th>Interview Date</th>' +
+                  '<th class="text-center">Type of Application</th><th class="text-center">Status</th><th class="text-center">Action</th>' +
+                '</tr>' +
+              '</thead>' +
+            '</table>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  /**
+   * One-shot: use appData (from single batch fetch on load). No server calls. Instant render.
+   */
+  function initTrackerOneShot() {
+    var container = document.getElementById('trackerYearlyCardsContainer');
+    if (!container) return;
+    var payload = appData;
+    if (!payload || !payload.metadata) {
+      container.innerHTML = '<div class="text-center text-danger py-5">Error loading tracker data.</div>';
+      return;
+    }
+    renderYearlyCards(payload.metadata);
+    var provList = payload.provinces || [];
+    function fillProvince(selId) {
+      var sel = document.getElementById(selId);
+      if (!sel) return;
+      sel.innerHTML = '';
+      sel.appendChild(new Option('All Provinces', ''));
+      provList.forEach(function(p) {
+        var name = (p.provinceName || '').trim();
+        if (name) sel.appendChild(new Option(name, name));
+      });
+      sel.value = '';
+    }
+    var years = payload.years || {};
+    var keys = payload.metadata.map(function(t) {
+      return (t.year !== undefined && t.year !== null && String(t.year).trim() !== '') ? String(t.year).trim() : 'legacy';
+    });
+    keys.forEach(function(key) {
+      fillProvince('trackerProvince' + key);
+      var sel = document.getElementById('trackerProvince' + key);
+      if (sel) sel.addEventListener('change', function() { applyProvinceFilter(key); });
+      var initialData = years[key] || [];
+      createTrackerDataTableForYear('table-' + key, (key === 'legacy' ? '' : key), initialData);
+    });
+    var numericYears = keys.filter(function(k) { return k !== 'legacy'; }).sort(function(a, b) { return (b || '').localeCompare(a || ''); });
+    var defaultYear = numericYears[0] || keys[0];
+    if (defaultYear) {
+      showTable(defaultYear);
+      var link = document.querySelector('.sidebar-tracker-year[data-year="' + defaultYear + '"]');
+      if (link) setSidebarYearActive(link);
+    }
+  }
+
+  /** Instant province filter from local appData. No server call. */
+  function applyProvinceFilter(year) {
+    var provId = 'trackerProvince' + year;
+    var provSel = document.getElementById(provId);
+    var province = (provSel && provSel.value) ? provSel.value.trim() : '';
+    var tableSelector = '#table-' + year;
+    if (typeof $ !== 'undefined' && $.fn.DataTable && $.fn.DataTable.isDataTable(tableSelector)) {
+      var dt = $(tableSelector).DataTable();
+      dt.column(11).search(province ? '^' + province.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$' : '', true, false).draw(false);
+    }
+  }
+
+  function createMenuManageDataTable(data) {
+    var tableSelector = '#menuManageTable';
+    if (!document.querySelector(tableSelector)) return;
+    if ($.fn.DataTable.isDataTable(tableSelector)) {
+      $(tableSelector).DataTable().destroy();
+    }
+    $(tableSelector).DataTable({
+      data: data || [],
+      columns: [
+        { data: 'uniqueId', className: 'text-center fw-bold text-muted', width: '80px' },
+        { data: 'tableName' },
+        { data: 'year', className: 'text-center', width: '80px' },
+        { data: 'displayLabel', defaultContent: '' },
+        { data: 'createdAt', render: function(d) { return d ? new Date(d).toLocaleString() : '-'; } },
+        { data: 'status', className: 'text-center', width: '90px', render: function(d) {
+          var s = (d || '').trim();
+          var cls = s === 'Archived' ? 'bg-secondary' : 'bg-success';
+          return '<span class="badge ' + cls + '">' + (s || 'Active') + '</span>';
+        }},
+        { data: 'uniqueId', className: 'text-center dtfc-fixed-right', orderable: false, width: '120px',
+          render: function(_, __, row) {
+            if (!row) return '';
+            var uid = (row.uniqueId || '').replace(/'/g, "\\'");
+            return '<div class="btn-group btn-group-sm menu-action-btns">' +
+              '<button class="btn btn-sm btn-outline-success menu-btn-edit action-icon-edit" data-id="' + uid + '" data-label="' + (row.displayLabel || '').replace(/"/g, '&quot;') + '" title="Edit label"><i class="bi bi-pencil-square"></i></button>' +
+              '<button class="btn btn-sm btn-outline-info menu-btn-sync" data-id="' + uid + '" title="Sync / Verify"><i class="bi bi-arrow-repeat"></i></button>' +
+              '<button class="btn btn-sm btn-outline-danger menu-btn-delete action-icon-delete" data-id="' + uid + '" title="Delete"><i class="bi bi-trash"></i></button>' +
+              '</div>';
+          }
+        }
+      ],
+      dom: '<"d-flex justify-content-between mb-2"lf>rt<"d-flex justify-content-between mt-2"ip>',
+      language: { emptyTable: 'No tables yet. Generate one above.' },
+      order: [[2, 'desc']]
+    });
+  }
+
+  function initMenuManageDataTable() {
+    var tableSelector = '#menuManageTable';
+    if (!document.querySelector(tableSelector)) return;
+    google.script.run
+      .withSuccessHandler(function(list) {
+        createMenuManageDataTable(list || []);
+        $(tableSelector).off('click', '.menu-btn-edit, .menu-btn-sync, .menu-btn-delete');
+        $(tableSelector).on('click', '.menu-btn-edit', function() {
+          var id = $(this).data('id');
+          var label = $(this).data('label') || '';
+          document.getElementById('menuEditUniqueId').value = id;
+          document.getElementById('menuEditDisplayLabel').value = label;
+          bootstrap.Modal.getOrCreateInstance(document.getElementById('menuEditLabelModal')).show();
+        });
+        $(tableSelector).on('click', '.menu-btn-sync', function() {
+          var id = $(this).data('id');
+          var $btn = $(this);
+          $btn.prop('disabled', true).find('i').addClass('spin');
+          google.script.run.withSuccessHandler(function(res) {
+            $btn.prop('disabled', false).find('i').removeClass('spin');
+            initMenuManageDataTable();
+          }).withFailureHandler(function() {
+            $btn.prop('disabled', false).find('i').removeClass('spin');
+          }).syncYearlyTracker(id);
+        });
+        $(tableSelector).on('click', '.menu-btn-delete', function() {
+          var id = $(this).data('id');
+          if (!confirm('Are you sure? This will remove the table from management. The sheet will be archived (hidden). This action cannot be undone.')) return;
+          google.script.run
+            .withSuccessHandler(function() {
+              google.script.run.withSuccessHandler(function(meta) {
+                if (appData) {
+                  appData.metadata = meta || [];
+                  var keepYears = {};
+                  (meta || []).forEach(function(m) { var k = (m.year || '').trim() || 'legacy'; keepYears[k] = true; });
+                  if (appData.years) {
+                    Object.keys(appData.years).forEach(function(k) { if (!keepYears[k]) delete appData.years[k]; });
+                  }
+                }
+                renderSidebar(meta || []);
+              }).withFailureHandler(function() { renderSidebar([]); }).fetchTableMetadata();
+              initMenuManageDataTable();
+            })
+            .withFailureHandler(function(e) { alert('Error: ' + (e && e.message ? e.message : e)); })
+            .deleteYearlyTracker(id, true);
+        });
+      })
+      .withFailureHandler(function() {
+        createMenuManageDataTable([]);
+      })
+      .fetchTableMetadata();
+  }
+
+  function saveMenuEditLabel() {
+    var id = document.getElementById('menuEditUniqueId').value;
+    var label = (document.getElementById('menuEditDisplayLabel').value || '').trim();
+    var btn = document.getElementById('menuEditSaveBtn');
+    if (!id) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    google.script.run
+      .withSuccessHandler(function() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        bootstrap.Modal.getInstance(document.getElementById('menuEditLabelModal')).hide();
+        google.script.run.withSuccessHandler(function(meta) {
+          if (appData) appData.metadata = meta || [];
+          renderSidebar(meta || []);
+        }).withFailureHandler(function() {}).fetchTableMetadata();
+        initMenuManageDataTable();
+      })
+      .withFailureHandler(function(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        alert('Error: ' + (e && e.message ? e.message : e));
+      })
+      .updateYearlyTrackerLabel(id, label);
+  }
+
+  function generateYearlyTable() {
+    var input = document.getElementById('menuYearInput');
+    var labelInput = document.getElementById('menuDisplayLabelInput');
+    var btn = document.getElementById('menuGenerateBtn');
+    var msg = document.getElementById('menuGenerateMessage');
+    if (!input || !btn || !msg) return;
+    var year = (input.value || '').trim();
+    if (!year || year.length !== 4) {
+      msg.className = 'mt-2 small text-danger';
+      msg.textContent = 'Enter a valid 4-digit year (e.g. 2026).';
+      return;
+    }
+    var displayLabel = (labelInput && labelInput.value) ? labelInput.value.trim() : '';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Creating...';
+    msg.className = 'mt-2 small text-muted';
+    msg.textContent = 'Creating table...';
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-lg me-2"></i>Generate Table';
+        msg.className = 'mt-2 small text-success';
+        msg.textContent = res.message || 'Year [' + year + '] generated. Sidebar updated & Data Validation synced.';
+        input.value = '';
+        if (labelInput) labelInput.value = '';
+        google.script.run.withSuccessHandler(function(meta) {
+          if (appData) { appData.metadata = meta || []; appData.years = appData.years || {}; appData.years[year] = appData.years[year] || []; }
+          renderSidebar(meta || []);
+        }).withFailureHandler(function() { renderSidebar([]); }).fetchTableMetadata();
+        initMenuManageDataTable();
+        if (typeof showTrackerToast === 'function') showTrackerToast(res.message || 'Year [' + year + '] generated. Sidebar updated & Data Validation synced.');
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-lg me-2"></i>Generate Table';
+        msg.className = 'mt-2 small text-danger';
+        var errMsg = (err && err.message ? err.message : 'Generation failed: Unknown error.').replace(/^Error:\s*/i, 'Generation failed: ');
+        msg.textContent = errMsg;
+        if (typeof showTrackerToast === 'function') showTrackerToast(errMsg, 'error');
+      })
+      .addNewYearlyTracker(year, displayLabel);
+  }
+  if (typeof window !== 'undefined') {
+    window.generateYearlyTable = generateYearlyTable;
+    window.saveMenuEditLabel = saveMenuEditLabel;
+    window.loadTrackerYear = loadTrackerYear;
+    window.showTable = showTable;
+    window.toggleSidebarTracker = toggleSidebarTracker;
+    window.renderSidebar = renderSidebar;
+    window.setSidebarYearActive = setSidebarYearActive;
   }
 
   /**
@@ -1518,7 +1887,7 @@ function generateSerial(prefix = '') {
         if (preview) preview.innerText = serial;
         if (hidden) hidden.value = serial;
       })
-      .getNextUserNumber(domain, provCode);
+      .getNextUserNumber(domain, provCode, window.activeFormYear || '');
   } else {
     if (preview) preview.innerText = isEdit ? "PENDING..." : "WAITING FOR INPUTS...";
   }
@@ -1528,11 +1897,12 @@ function generateSerial(prefix = '') {
  * UNIFIED FORM MODAL MANAGER
  * @param {string} mode - 'add' or 'edit'
  * @param {string} serial - Only required for 'edit'
+ * @param {string} targetYear - '2024' or '2025' for year-specific routing
  */
-function manageFormModal(mode, serial = null) {
+function manageFormModal(mode, serial = null, targetYear = null) {
+  window.activeFormYear = targetYear || '';
   const isEdit = mode === 'edit';
   const modalId = isEdit ? 'editApplicationModal' : 'addApplicationModal';
-  const overlay = document.getElementById('loadingOverlay');
   
   isModalOpen = true; 
 
@@ -1570,15 +1940,8 @@ function manageFormModal(mode, serial = null) {
   }
 
   if (isEdit && serial) {
-    if (overlay) {
-      document.getElementById('overlayTitle').innerText = "Fetching Record...";
-      document.getElementById('overlayMessage').innerText = "Loading application...";
-      overlay.classList.add('show');
-    }
-
     google.script.run
       .withSuccessHandler(function(payload) {
-        if (overlay) overlay.classList.remove('show');
         if (!payload || !payload.record) { isModalOpen = false; return; }
         var record = payload.record;
         var provList = payload.provList || [];
@@ -1667,11 +2030,10 @@ function manageFormModal(mode, serial = null) {
         bootstrap.Modal.getOrCreateInstance(document.getElementById(modalId)).show();
       })
       .withFailureHandler(function(err) {
-        if (overlay) overlay.classList.remove('show');
         isModalOpen = false;
         alert('Error loading record: ' + (err && err.message ? err.message : err));
       })
-      .getRecordBySerialForEdit(serial);
+      .getRecordBySerialForEdit(serial, window.activeFormYear || '');
   }
 }
 
@@ -1690,8 +2052,6 @@ async function handleFormSubmit(prefix = '') {
   const msgBody = document.getElementById('messageModalBody');
   
   const form = document.getElementById(formId);
-  const overlay = document.getElementById('loadingOverlay');
-  const overlayTitle = document.getElementById('overlayTitle');
   const fileInput = document.getElementById(isEdit ? 'editFileInput' : 'fileInput');
 
   // 1. Validate Form
@@ -1702,16 +2062,10 @@ async function handleFormSubmit(prefix = '') {
     return;
   }
 
-  // 2. Hide modal and show overlay immediately so save feels faster
+  // 2. Hide modal (no overlay - save runs in background, auto-refresh on success)
   const modalEl = document.getElementById(modalId);
   const modalInstance = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
   if (modalInstance) modalInstance.hide();
-  if (overlay) {
-    if (overlayTitle) overlayTitle.innerText = isEdit ? "Updating Record..." : "Saving Application...";
-    var overlayMsg = document.getElementById('overlayMessage');
-    if (overlayMsg) overlayMsg.innerText = (fileInput && fileInput.files && fileInput.files.length) ? "Uploading file and saving..." : "Saving...";
-    overlay.classList.add('show');
-  }
 
   try {
     // 3. Extract Form Data
@@ -1747,11 +2101,10 @@ async function handleFormSubmit(prefix = '') {
     // 8. Submit to Google Apps Script
     google.script.run
       .withSuccessHandler(res => {
-        if (overlay) overlay.classList.remove('show');
         if (res.success) {
           // Modal already hidden in step 2
-          // Refresh the Table
-          if (typeof initTrackerTable === "function") initTrackerTable();
+          // Targeted refresh for the active year
+          if (typeof refreshTrackerYear === "function") refreshTrackerYear(window.activeFormYear === '' ? 'legacy' : (window.activeFormYear || 'legacy'));
 
           // Show Success Notification
           const successModalEl = document.getElementById('successModal');
@@ -1777,33 +2130,22 @@ async function handleFormSubmit(prefix = '') {
         }
       })
       .withFailureHandler(err => {
-        if (overlay) overlay.classList.remove('show');
         showErrorMessage(msgModalEl, msgTitle, msgBody, "Critical Error", err.message);
       })
-      .saveApplication(formData, fileData); 
+      .saveApplication(formData, fileData, window.activeFormYear || ''); 
 
   } catch (error) {
-    if (overlay) overlay.classList.remove('show');
     showErrorMessage(msgModalEl, msgTitle, msgBody, "System Error", error.message);
   }
 }
-async function handleBulkUpload(event) {
+async function handleBulkUpload(event, year) {
   const file = event.target.files[0];
   if (!file) return;
+  window.activeFormYear = year || '';
 
-  const overlay = document.getElementById('loadingOverlay');
-  const oTitle = document.getElementById('overlayTitle');
-  const oMsg = document.getElementById('overlayMessage');
-  
   const msgModalEl = document.getElementById('messageBulkModal');
   const msgTitle = document.getElementById('messageBulkModalTitle');
   const msgBody = document.getElementById('messageBulkModalBody');
-
-  if (overlay) {
-    oTitle.innerText = "Processing Excel...";
-    oMsg.innerText = "Checking data rows for errors. Please wait.";
-    overlay.classList.add('show');
-  }
 
   const reader = new FileReader();
   reader.onload = function(e) {
@@ -1875,7 +2217,6 @@ async function handleBulkUpload(event) {
       });
 
       if (errors.length > 0) {
-        if (overlay) overlay.classList.remove('show');
         const errorHtml = `
           <div class="text-start">
             <p class="mb-3 text-secondary text-center">Errors found in ${errors.length} locations:</p>
@@ -1891,12 +2232,8 @@ async function handleBulkUpload(event) {
         return;
       }
 
-      if (oTitle) oTitle.innerText = "Saving Records...";
-      if (oMsg) oMsg.innerText = `Finalizing ${processedData.length} entries.`;
-
       google.script.run
         .withSuccessHandler(res => {
-          if (overlay) overlay.classList.remove('show');
           const successModalEl = document.getElementById('successModal');
           if (successModalEl) {
             document.getElementById('successModalTitle').innerText = "Bulk Uploaded!";
@@ -1904,51 +2241,95 @@ async function handleBulkUpload(event) {
             new bootstrap.Modal(successModalEl).show();
           }
           event.target.value = ''; 
-          if (typeof initTrackerTable === "function") initTrackerTable();
+          if (typeof refreshTrackerYear === "function") refreshTrackerYear(window.activeFormYear === '' ? 'legacy' : (window.activeFormYear || 'legacy'));
         })
         .withFailureHandler(err => {
-          if (overlay) overlay.classList.remove('show');
           showErrorMessage(msgModalEl, msgTitle, msgBody, "Server Error", err.message);
-          var bulkInput = document.getElementById('bulkUploadInput');
-          if (bulkInput) bulkInput.value = '';
+          if (event.target) event.target.value = '';
         })
-        .processBulkUpload(processedData);
+        .processBulkUpload(processedData, window.activeFormYear || '');
 
     } catch (err) {
-      if (overlay) overlay.classList.remove('show');
       showErrorMessage(msgModalEl, msgTitle, msgBody, "System Error", err.message);
-      var bulkInput = document.getElementById('bulkUploadInput');
-      if (bulkInput) bulkInput.value = '';
+      if (event.target) event.target.value = '';
     }
   };
   reader.readAsArrayBuffer(file);
 }
 
-// Delete Function
+/**
+ * Edit entry: opens edit modal with row data. Extracts year/id from button data attributes.
+ */
+function editEntry(btn) {
+  var year = (btn && btn.getAttribute('data-year')) || '';
+  var id = (btn && btn.getAttribute('data-id')) || '';
+  var serverYear = year === 'legacy' ? '' : year;
+  manageFormModal('edit', id, serverYear);
+}
+if (typeof window !== 'undefined') window.editEntry = editEntry;
+
+/**
+ * Delete entry: optimistic UI - remove row instantly, sync in background. Rollback on error.
+ */
+function deleteEntry(btn) {
+  var year = (btn && btn.getAttribute('data-year')) || '';
+  var id = (btn && btn.getAttribute('data-id')) || '';
+  var serverYear = year === 'legacy' ? '' : year;
+  var tableKey = year === 'legacy' ? 'legacy' : year;
+  var tableId = 'table-' + tableKey;
+
+  if (!confirm('Are you sure you want to delete this record? This action cannot be undone.')) return;
+
+  var tableEl = document.getElementById(tableId);
+  var $row = btn ? $(btn).closest('tr') : null;
+  var removedRow = null;
+  if (tableEl && $.fn.DataTable.isDataTable(tableEl) && $row && $row.length) {
+    var dt = $(tableEl).DataTable();
+    removedRow = dt.row($row).data();
+    dt.row($row).remove().draw(false);
+    if (appData && appData.years && appData.years[tableKey]) {
+      appData.years[tableKey] = (appData.years[tableKey] || []).filter(function(r) { return (r.serial || '') !== id; });
+    }
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        showTrackerToast(res.message || 'Record successfully removed from ' + (serverYear || 'Legacy') + ' Tracker.', 'success');
+      } else {
+        if (removedRow && tableEl && $.fn.DataTable.isDataTable(tableEl)) {
+          $(tableEl).DataTable().row.add(removedRow).draw(false);
+          if (appData && appData.years && appData.years[tableKey]) appData.years[tableKey].push(removedRow);
+        }
+        showTrackerToast(res.message || 'Delete failed.', 'error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (removedRow && tableEl && $.fn.DataTable.isDataTable(tableEl)) {
+        $(tableEl).DataTable().row.add(removedRow).draw(false);
+        if (appData && appData.years && appData.years[tableKey]) appData.years[tableKey].push(removedRow);
+      }
+      showTrackerToast(err && err.message ? err.message : 'Delete failed.', 'error');
+    })
+    .deleteApplicationRecord(serverYear, id);
+}
+if (typeof window !== 'undefined') window.deleteEntry = deleteEntry;
+
+// Delete Function (legacy / other tables)
 function initiateDelete(id, sheetName = 'AppTracker', colIndex = 1) {
   const modalEl = document.getElementById('deleteConfirmModal');
   const confirmBtn = document.getElementById('confirmDeleteBtn');
-  const overlay = document.getElementById('loadingOverlay');
 
   const deleteModal = new bootstrap.Modal(modalEl);
   deleteModal.show();
 
-  // Set the logic for when they click "Delete" in the modal
   confirmBtn.onclick = function() {
     deleteModal.hide();
-    
-    if (overlay) {
-      document.getElementById('overlayTitle').innerText = "Deleting...";
-      document.getElementById('overlayMessage').innerText = "Removing " + id;
-      overlay.classList.add('show');
-    }
-
     google.script.run
       .withSuccessHandler(res => {
-        if (overlay) overlay.classList.remove('show');
         if (res.success) {
-          // Refresh the table
-          if (typeof initTrackerTable === "function") initTrackerTable();
+          var year = (sheetName && sheetName.indexOf('AppTracker_') === 0) ? sheetName.replace('AppTracker_', '') : 'legacy';
+          if (typeof refreshTrackerYear === "function") refreshTrackerYear(year);
           
           // Show Success Modal
           const successModal = new bootstrap.Modal(document.getElementById('successModal'));
@@ -1961,7 +2342,6 @@ function initiateDelete(id, sheetName = 'AppTracker', colIndex = 1) {
         }
       })
       .withFailureHandler(err => {
-        if (overlay) overlay.classList.remove('show');
         alert("Error: " + (err && err.message ? err.message : err));
       })
       .deleteRecord(id, sheetName, colIndex);
