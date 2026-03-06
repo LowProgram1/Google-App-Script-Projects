@@ -1,0 +1,127 @@
+<div class="animate-fade-in">
+  <h3 class="fw-bold m-0 text-dark page-title mb-4">Category</h3>
+
+  <!-- Container 1: Sector & Cities (default minimized) -->
+  <div class="category-container-card mb-4">
+    <div class="category-container-header d-flex align-items-center collapsed" data-bs-toggle="collapse" data-bs-target="#categorySectorCitiesCollapse" aria-expanded="false" aria-controls="categorySectorCitiesCollapse">
+      <button type="button" class="category-collapse-btn" aria-label="Minimize or expand">
+        <i class="bi bi-chevron-up category-collapse-icon-expanded d-none"></i>
+        <i class="bi bi-chevron-down category-collapse-icon-collapsed"></i>
+      </button>
+      <h5 class="fw-bold text-dark m-0">
+        <i class="bi bi-tags me-2 text-primary"></i>Sector &amp; Cities
+      </h5>
+    </div>
+    
+    <div class="collapse" id="categorySectorCitiesCollapse">
+      <div class="p-3 p-md-4">
+        <div class="row g-4">
+          <!-- Cities - left column -->
+          <div class="col-12 col-lg-6">
+            <div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0;">
+              <div class="px-3 py-2 border-bottom border-light bg-light d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold text-dark m-0"><i class="bi bi-geo-alt me-2 text-primary"></i>Cities</h6>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="openAddCityModal()">
+                  <i class="bi bi-plus-lg me-1"></i>New City
+                </button>
+              </div>
+              <div class="table-responsive">
+                <table id="citiesTable" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">
+                  <thead class="bg-dark text-white">
+                    <tr>
+                      <th>No.</th>
+                      <th>Dom. Code</th>
+                      <th>Prov. Code</th>
+                      <th>Province</th>
+                      <th>City / Municipality</th>
+                      <th>District</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <!-- Sector - right column -->
+          <div class="col-12 col-lg-6">
+            <div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0;">
+              <div class="px-3 py-2 border-bottom border-light bg-light d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold text-dark m-0"><i class="bi bi-tags me-2 text-primary"></i>Sector</h6>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="openAddSectorModal()">
+                  <i class="bi bi-plus-lg me-1"></i>New Sector
+                </button>
+              </div>
+              <div class="table-responsive">
+                <table id="sectorTable" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">
+                  <thead class="bg-dark text-white">
+                    <tr>
+                      <th>No.</th>
+                      <th>Code</th>
+                      <th>Sector Name</th>
+                      <th>Alias</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Container 2: Agency (default minimized) -->
+  <div class="category-container-card">
+    <div class="category-container-header d-flex align-items-center collapsed" data-bs-toggle="collapse" data-bs-target="#categoryAgencyCollapse" aria-expanded="false" aria-controls="categoryAgencyCollapse">
+      <button type="button" class="category-collapse-btn" aria-label="Minimize or expand">
+        <i class="bi bi-chevron-up category-collapse-icon-expanded d-none"></i>
+        <i class="bi bi-chevron-down category-collapse-icon-collapsed"></i>
+      </button>
+      <h5 class="fw-bold text-dark m-0">
+        <i class="bi bi-building me-2 text-primary"></i>Agency
+      </h5>
+    </div>
+    <div class="collapse" id="categoryAgencyCollapse">
+      <div class="p-3 p-md-4">
+        <div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0;">
+          <div class="px-3 py-2 border-bottom border-light bg-light d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold text-dark m-0"><i class="bi bi-building me-2 text-primary"></i>Agency</h6>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="openAddAgencyModal()">
+              <i class="bi bi-plus-lg me-1"></i>New Agency
+            </button>
+          </div>
+          <div class="table-responsive">
+            <table id="agencyTable" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">
+              <thead class="bg-dark text-white">
+                <tr>
+                  <th>No.</th>
+                  <th>Agency Name</th>
+                  <th>Agency Alias</th>
+                  <th>Sector</th>
+                  <th>Agency Head</th>
+                  <th>Position</th>
+                  <th>Agency Email</th>
+                  <th>Contact Person</th>
+                  <th>Contact Number</th>
+                  <th>Contact Email</th>
+                  <th class="text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<?!= include('View.CategorySector.Add'); ?>
+<?!= include('View.CategorySector.Edit'); ?>
+<?!= include('View.CategoryCity.Add'); ?>
+<?!= include('View.CategoryCity.Edit'); ?>
+<?!= include('View.CategoryAgency.Add'); ?>
+<?!= include('View.CategoryAgency.Edit'); ?>

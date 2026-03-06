@@ -1,0 +1,137 @@
+<div class="modal fade" id="editApplicationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-warning text-dark p-4">
+        <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit PNPKI Application</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body p-4 bg-light">
+        <form id="editAppForm" class="needs-validation" novalidate>
+          
+          <div class="alert alert-warning d-flex justify-content-between align-items-center mb-4">
+            <div>
+              <small class="text-uppercase opacity-75 d-block">Application Serial Number</small>
+              <h4 class="mb-0 fw-bold font-monospace" id="editSerialDisplay">FETCHING...</h4>
+              <input type="hidden" name="originalSerial" id="editOriginalSerial">
+              <input type="hidden" name="serial" id="editSerialInput">
+            </div>
+            <i class="bi bi-shield-lock-fill fs-2 opacity-25"></i>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Domain</label>
+              <select class="form-select" name="domain" id="editDomainSelect" onchange="generateSerial('edit'); updateProvinces('edit')" required>
+                <option value="015">015</option>
+                <option value="017">017</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Province</label>
+              <select class="form-select" name="province" id="editProvinceSelect" onchange="generateSerial('edit'); updateCities('edit')" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Sector</label>
+              <select class="form-select" name="sector" id="editSectorSelect" onchange="generateSerial('edit'); updateAgencyDropdown('edit')" required>
+                <option value="" disabled>Select Sector...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">City / Municipality</label>
+              <select class="form-select" name="city" id="editCitySelect" onchange="autoFillDistrict('edit')" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">District</label>
+              <input type="text" class="form-control" name="district" id="editDistrict" readonly tabindex="-1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Interview Date</label>
+              <input type="date" class="form-control" name="interviewDate" id="editInterviewDate" required>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Type of Application</label>
+              <input type="text" class="form-control bg-light" name="typeOfApplication" id="editTypeOfApplication" readonly tabindex="-1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Certificate Status</label>
+              <select class="form-select" name="certificateStatus" id="editCertificateStatus">
+                <option value="Active">Active</option>
+                <option value="Revoked">Revoked</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Last Name</label>
+              <input type="text" class="form-control" name="lastName" id="editLastName" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">First Name</label>
+              <input type="text" class="form-control" name="firstName" id="editFirstName" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Middle Name</label>
+              <input type="text" class="form-control" id="editMiddleName" name="middleName" required>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" id="editNoMiddleName">
+                <label class="form-check-label small" for="editNoMiddleName">N/A</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-2">
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Suffix</label>
+              <input type="text" class="form-control" id="editSuffix" name="suffix" required>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" id="editNoSuffix">
+                <label class="form-check-label small" for="editNoSuffix">N/A</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Email</label>
+              <input type="email" class="form-control" name="email" id="editEmail" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Contact Number</label>
+              <input type="text" class="form-control" name="contact" id="editContact" placeholder="09 or 639*********" inputmode="numeric" pattern="^\d{7,12}$" maxlength="12" title="Numbers only. Mobile: 11 digits (09...) or 12 digits (639...). Landline: 7–10 digits." required autocomplete="tel">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Gender</label>
+              <select class="form-select" name="gender" id="editGender" required>
+                <option value="" disabled>Select Gender...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-2">
+             <div class="col-md-8">
+              <label class="form-label fw-semibold">Agency</label>
+              <select name="agency" id="editAgency" class="form-select" style="width: 100%;" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Update File (Optional)</label>
+              <input type="file" class="form-control" id="editFileInput">
+              <small class="text-muted">Upload to replace existing document.</small>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer bg-white p-3">
+        <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning rounded-pill px-4 fw-bold" onclick="handleFormSubmit('edit')">Update Application</button>
+      </div>
+    </div>
+  </div>
+</div>

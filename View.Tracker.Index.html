@@ -1,0 +1,75 @@
+<div class="animate-fade-in">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
+    <h3 class="fw-bold m-0 text-dark page-title">Application Tracker</h3>
+    
+    <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
+      <button class="btn btn-outline-secondary rounded-pill px-3 shadow-sm" onclick="downloadBulkTemplate()">
+        <i class="bi bi-download me-2"></i>
+        <span class="d-none d-sm-inline">Template</span>
+      </button>
+
+      <button class="btn btn-success rounded-pill px-4 shadow-sm" onclick="document.getElementById('bulkUploadInput').click()">
+        <i class="bi bi-file-earmark-excel me-2"></i>
+        <span class="d-none d-sm-inline">Bulk Upload</span>
+      </button>
+      <input type="file" id="bulkUploadInput" accept=".xlsx, .xls" style="display:none" onchange="handleBulkUpload(event)">
+
+      <button class="btn btn-primary rounded-pill px-4 shadow-sm" onclick="manageFormModal('add')">
+        <i class="bi bi-plus-lg me-2"></i>
+        <span class="d-none d-sm-inline">New Application</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="glass-card p-0 overflow-hidden" style="border: 1px solid #e2e8f0;">
+    <table id="trackerTable" class="table table-hover nowrap w-100" style="margin-top: 0 !important;">
+      <thead class="bg-light">
+        <tr>
+          <th>#</th>
+          <th>Serial Number</th>
+          <th>Last Name</th>
+          <th>First Name</th>
+          <th>Middle Name</th>
+          <th>Suffix</th>
+          <th>Email Address</th>
+          <th>Contact Number</th>
+          <th>Gender</th>
+          <th>Agency</th>
+          <th>Sector</th>
+          <th>Province</th>
+          <th>City/Municipality</th>
+          <th>District</th>
+          <th>Interview Date</th>
+          <th class="text-center">Type of Application</th>
+          <th class="text-center">Status</th>
+          <th class="text-center">Action</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="viewFileModal" tabindex="-1" aria-labelledby="viewFileModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h1 class="modal-title fs-5" id="viewFileModalLabel">File Preview</h1>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-0">
+        <div class="p-4">
+          <img id="viewFileImagePreview" src="" alt="Loading Preview..." 
+               class="img-fluid rounded shadow-sm" 
+               style="max-height: 70vh; width: auto; display: inline-block;">
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <a id="downloadFileBtn" href="#" target="_blank" class="btn btn-outline-primary">
+          <i class="bi bi-download"></i> Download File
+        </a>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+
+    </div>
+  </div>
+</div>

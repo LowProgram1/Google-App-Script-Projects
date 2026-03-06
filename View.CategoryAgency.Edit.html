@@ -1,0 +1,60 @@
+<!-- Edit Agency modal: included by View.Category.Index -->
+<div class="modal fade" id="editAgencyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold">Edit Agency</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editAgencyForm">
+          <input type="hidden" id="editAgencyOldUniqueId" value="">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Agency Name</label>
+              <input type="text" class="form-control" id="editAgencyName" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Agency Alias</label>
+              <input type="text" class="form-control" id="editAgencyAlias" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Sector</label>
+              <select class="form-select" id="editAgencySector">
+                <option value="">— None —</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Agency Head</label>
+              <input type="text" class="form-control" id="editAgencyHead">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Position</label>
+              <input type="text" class="form-control" id="editAgencyPosition">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Agency Email</label>
+              <input type="email" class="form-control" id="editAgencyEmail">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Contact Person</label>
+              <input type="text" class="form-control" id="editAgencyContactPerson">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Contact Number</label>
+              <input type="text" class="form-control" id="editAgencyContactNumber">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Contact Email</label>
+              <input type="email" class="form-control" id="editAgencyContactEmail">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary rounded-pill px-3" id="editAgencySubmitBtn" onclick="submitEditAgency()">Update Agency</button>
+      </div>
+    </div>
+  </div>
+</div>

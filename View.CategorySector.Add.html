@@ -1,0 +1,31 @@
+<!-- Add Sector modal: included by View.Category.Index, used for Sector table -->
+<div class="modal fade" id="addSectorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold">New Sector</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addSectorForm">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Sector Name</label>
+            <input type="text" class="form-control" id="newSectorName" placeholder="e.g. National Government Agency" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Sector Alias</label>
+            <input type="text" class="form-control" id="newSectorAlias" placeholder="e.g. NGA" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Code <small class="text-muted">(1 character, used in serial number)</small></label>
+            <input type="text" class="form-control" id="newSectorCode" maxlength="1" placeholder="e.g. N" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary rounded-pill px-3" id="addSectorSubmitBtn" onclick="submitAddSector()">Save Sector</button>
+      </div>
+    </div>
+  </div>
+</div>
